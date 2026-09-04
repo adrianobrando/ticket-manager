@@ -7,21 +7,30 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    const response = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error || "Accesso non riuscito.");
-      return;
+    setLoading(true);
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ password }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || "Accesso non riuscito.");
+        return;
+      }
+      router.replace("/admin");
+    } catch {
+      setError("Impossibile contattare il server. Riprova.");
+    } finally {
+      setLoading(false);
     }
-    router.replace("/admin");
   }
 
   return (
@@ -36,7 +45,7 @@ export default function AdminLoginPage() {
           <input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
         </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <button className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white" type="submit">Accedi</button>
+        <button className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={loading} type="submit">{loading ? "Accesso in corso..." : "Accedi"}</button>
       </form>
     </main>
   );
