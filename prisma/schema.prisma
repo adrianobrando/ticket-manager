@@ -1,0 +1,142 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+  tickets   Ticket[]
+  contracts ClientContract[]
+}
+
+model Ticket {
+  id             String          @id @default(cuid())
+  title          String
+  description    String
+  type           String
+  priority       String          @default("normal")
+  status         String          @default("new")
+  clientId       String
+  client         Client          @relation(fields: [clientId], references: [id])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  dueDate        DateTime?
+  estimatedHours Float           @default(0)
+  actualHours    Float           @default(0)
+  token          String          @unique @default(cuid())
+  comments       Comment[]
+  scheduledTask  ScheduledTask?
+  workDays       WorkDay[]
+  workLogs       WorkLog[]
+  contractId     String?
+  contract       ClientContract? @relation(fields: [contractId], references: [id])
+  timeEntries    TimeEntry[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+  @@index([contractId])
+}
+
+model ClientContract {
+  id                    String   @id @default(cuid())
+  clientId              String
+  client                Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name                  String
+  type                  String
+  monthlyHoursIncluded  Float?
+  hourlyRate            Float
+  startDate             DateTime
+  endDate               DateTime?
+  isActive               Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  tickets               Ticket[]
+  timeEntries           TimeEntry[]
+
+  @@index([clientId])
+  @@index([isActive])
+}
+
+model TimeEntry {
+  id            String          @id @default(cuid())
+  ticketId      String
+  ticket        Ticket          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  contractId    String?
+  contract      ClientContract? @relation(fields: [contractId], references: [id])
+  userId        String?
+  date          DateTime
+  startTime     DateTime
+  endTime       DateTime
+  durationHours Float
+  note          String?
+  createdAt     DateTime        @default(now())
+
+  @@index([ticketId])
+  @@index([contractId])
+  @@index([date])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([createdAt])
+}
+
+model ScheduledTask {
+  id        String   @id @default(cuid())
+  ticketId  String   @unique
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  startDate DateTime
+  endDate   DateTime
+  sortOrder Int      @default(0)
+
+  @@index([startDate, endDate])
+  @@index([sortOrder])
+}
+
+model WorkDay {
+  id           String   @id @default(cuid())
+  date         DateTime
+  ticketId     String
+  ticket       Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  plannedHours Float
+  overflow     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@unique([date, ticketId])
+  @@index([date])
+  @@index([ticketId])
+}
+
+model WorkLog {
+  id        String   @id @default(cuid())
+  date      DateTime
+  startTime DateTime
+  endTime   DateTime
+  duration  Float
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([date])
+  @@index([ticketId])
+}
