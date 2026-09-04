@@ -1,11 +1,16 @@
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/app/generated/prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createPrismaClient() {
-  const adapter = new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
+  const databaseUrl = new URL(process.env.DATABASE_URL ?? "");
+  databaseUrl.searchParams.delete("sslmode");
+  databaseUrl.searchParams.delete("ssl");
+  const adapter = new PrismaPg({
+    connectionString: databaseUrl.toString(),
+    ssl: { rejectUnauthorized: process.env.NODE_ENV === "production" },
+    connectionTimeoutMillis: 10_000,
   });
   return new PrismaClient({ adapter });
 }
