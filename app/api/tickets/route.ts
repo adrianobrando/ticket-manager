@@ -35,12 +35,16 @@ export async function POST(request: Request) {
     const scheduled = await calculateSchedule();
     const ticketWithSchedule =
       scheduled.find((item) => item.id === ticket.id) ?? ticket;
-    await sendTicketCreatedEmail({
-      title: ticketWithSchedule.title,
-      token: ticketWithSchedule.token,
-      clientEmail: ticket.client.email,
-      clientName: ticket.client.name,
-    });
+    try {
+      await sendTicketCreatedEmail({
+        title: ticketWithSchedule.title,
+        token: ticketWithSchedule.token,
+        clientEmail: ticket.client.email,
+        clientName: ticket.client.name,
+      });
+    } catch (emailError) {
+      console.error("Errore invio email Resend, ma il ticket è stato creato:", emailError);
+    }
 
     return NextResponse.json(ticketWithSchedule, { status: 201 });
   } catch (error) {

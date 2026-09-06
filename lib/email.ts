@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 type TicketEmail = {
   title: string;
@@ -8,28 +8,14 @@ type TicketEmail = {
   status?: string;
 };
 
-function getTransporter() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const from = process.env.EMAIL_FROM;
+function getResend() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("RESEND_API_KEY non configurata");
+  return new Resend(apiKey);
+}
 
-  if (!host || !Number.isInteger(port) || port <= 0 || !from) {
-    throw new Error(
-      "Configurazione SMTP incompleta: servono SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS ed EMAIL_FROM",
-    );
-  }
-
-  return {
-    transporter: nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      ...(user && pass ? { auth: { user, pass } } : {}),
-    }),
-    from,
-  };
+function getFromAddress() {
+  return process.env.RESEND_FROM || "Ticket Manager <onboarding@resend.dev>";
 }
 
 function trackingUrl(token: string) {
@@ -38,11 +24,11 @@ function trackingUrl(token: string) {
 }
 
 export async function sendTicketCreatedEmail(ticket: TicketEmail) {
-  const { transporter, from } = getTransporter();
+  const resend = getResend();
   const url = trackingUrl(ticket.token);
 
-  await transporter.sendMail({
-    from,
+  await resend.emails.send({
+    from: getFromAddress(),
     to: ticket.clientEmail,
     subject: `Richiesta ricevuta: ${ticket.title}`,
     text: `Ciao ${ticket.clientName}, abbiamo ricevuto la tua richiesta "${ticket.title}". Seguila qui: ${url}`,
@@ -51,11 +37,11 @@ export async function sendTicketCreatedEmail(ticket: TicketEmail) {
 }
 
 export async function sendTicketStatusChangedEmail(ticket: TicketEmail & { status: string }) {
-  const { transporter, from } = getTransporter();
+  const resend = getResend();
   const url = trackingUrl(ticket.token);
 
-  await transporter.sendMail({
-    from,
+  await resend.emails.send({
+    from: getFromAddress(),
     to: ticket.clientEmail,
     subject: `Aggiornamento ticket: ${ticket.title}`,
     text: `Lo stato del ticket "${ticket.title}" è ora "${ticket.status}". Seguilo qui: ${url}`,
