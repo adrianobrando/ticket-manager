@@ -4,18 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { PRIORITY_RANK } from "@/lib/scheduler";
 import { ticketFiltersSchema } from "@/lib/validation";
 
+export const runtime = "nodejs";
+
 export async function GET(request: Request) {
   try {
-    const headers = new Headers(request.headers);
-    if (!headers.get("x-admin-password")) {
-      const cookiePassword = request.headers
-        .get("cookie")
-        ?.split(";")
-        .map((cookie) => cookie.trim().split("="))
-        .find(([name]) => name === "admin-password")?.[1];
-      if (cookiePassword) headers.set("x-admin-password", decodeURIComponent(cookiePassword));
-    }
-    const authError = requireAdminPassword(new Request(request, { headers }));
+    const authError = requireAdminPassword(request);
     if (authError) return authError;
     const { searchParams } = new URL(request.url);
     const { status, priority, page, pageSize } = ticketFiltersSchema.parse({
@@ -50,7 +43,26 @@ export async function GET(request: Request) {
       return a.createdAt.getTime() - b.createdAt.getTime();
     });
 
-    return Response.json({ tickets, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+    const serializedTickets = tickets.map((ticket) => ({
+      ...ticket,
+      createdAt: ticket.createdAt.toISOString(),
+      dueDate: ticket.dueDate?.toISOString() ?? null,
+      scheduledTask: ticket.scheduledTask
+        ? {
+            ...ticket.scheduledTask,
+            startDate: ticket.scheduledTask.startDate.toISOString(),
+            endDate: ticket.scheduledTask.endDate.toISOString(),
+          }
+        : null,
+    }));
+
+    return Response.json({
+      tickets: serializedTickets,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    });
   } catch (error) {
     return handleRouteError(error);
   }
