@@ -9,7 +9,7 @@ function createPrismaClient() {
   databaseUrl.searchParams.delete("ssl");
   const adapter = new PrismaPg({
     connectionString: databaseUrl.toString(),
-    ssl: { rejectUnauthorized: process.env.NODE_ENV === "production" },
+    ssl: { rejectUnauthorized: false },
     connectionTimeoutMillis: 10_000,
   });
   return new PrismaClient({ adapter });
