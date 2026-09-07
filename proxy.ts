@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { hasValidAdminSession } from "@/lib/admin-auth";
 
 export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname === "/admin/login") {
     return NextResponse.next();
   }
 
-  const configuredPassword = process.env.ADMIN_PASSWORD;
   const session = request.cookies.get("admin_session")?.value;
-  if (configuredPassword && session === configuredPassword) {
+  if (hasValidAdminSession(session)) {
     return NextResponse.next();
   }
 
