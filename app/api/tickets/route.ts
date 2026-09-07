@@ -1,16 +1,39 @@
 import { NextResponse } from "next/server";
-import { handleRouteError, readJsonBody } from "@/lib/api";
+import { handleRouteError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { calculateSchedule } from "@/lib/scheduler";
 import { sendTicketCreatedEmail } from "@/lib/email";
 import { createTicketSchema } from "@/lib/validation";
 
+async function verifyTurnstile(token: string) {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return false;
+
+  const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ secret, response: token }),
+  });
+
+  if (!response.ok) return false;
+
+  const result = (await response.json()) as { success?: boolean };
+  return result.success === true;
+}
+
 export async function POST(request: Request) {
   try {
-    const body = await readJsonBody(request);
-    if (!body.ok) return body.response;
+    const formData = await request.formData();
+    const turnstileToken = formData.get("turnstileToken");
+    if (typeof turnstileToken !== "string" || !turnstileToken.trim()) {
+      return NextResponse.json({ error: "Verifica anti-spam fallita" }, { status: 400 });
+    }
 
-    const input = createTicketSchema.parse(body.data);
+    if (!(await verifyTurnstile(turnstileToken))) {
+      return NextResponse.json({ error: "Verifica anti-spam fallita" }, { status: 400 });
+    }
+
+    const input = createTicketSchema.parse(Object.fromEntries(formData.entries()));
     const { title, description, type, priority, clientName, clientEmail, estimatedHours, contractId } = input;
 
     const client = await prisma.client.upsert({
