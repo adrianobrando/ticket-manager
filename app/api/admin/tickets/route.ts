@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       prisma.ticket.findMany({
       where,
       select: {
-       id: true, title: true, type: true, priority: true, status: true, contractId: true,
+       id: true, title: true, token: true, type: true, priority: true, status: true, contractId: true,
        createdAt: true, dueDate: true, estimatedHours: true,
        client: { select: { id: true, name: true, email: true } },
        contract: { select: { id: true, name: true, type: true, monthlyHoursIncluded: true } },

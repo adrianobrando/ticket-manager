@@ -8,6 +8,7 @@ import { getPriorityStyles, PriorityBadge } from "@/app/components/ui";
 type Ticket = {
   id: string;
   title: string;
+  token: string;
   type: string;
   priority: string;
   status: string;
@@ -278,8 +279,8 @@ export default function AdminPage() {
 
         {activeTab === "tickets" && <><section className="overflow-x-auto rounded-2xl bg-white shadow-sm">
           {loading ? <p className="p-6 text-slate-500">Caricamento...</p> : (
-            <table className="w-full min-w-[900px] text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50"><tr>{["Titolo", "Cliente", "Tipo", "Priorità", "Stato", "Data stimata", "Azioni"].map((heading) => <th className="px-4 py-3 font-semibold" key={heading}>{heading}</th>)}</tr></thead>
-              <tbody>{tickets.map((ticket) => { const styles = getPriorityStyles(ticket.priority); return <tr className={`border-b border-l-4 border-slate-100 last:border-0 ${styles.border} ${styles.background}`} key={ticket.id}><td className="px-4 py-4 font-medium">{ticket.title}</td><td className="px-4 py-4">{ticket.client.name}<br /><span className="text-xs text-slate-600">{ticket.client.email}</span></td><td className="px-4 py-4">{ticket.type}</td><td className="px-4 py-4"><PriorityBadge priority={ticket.priority} /></td><td className="px-4 py-4">{statusLabels[ticket.status] || ticket.status}</td><td className="px-4 py-4">{formatDate(ticket.dueDate)}</td><td className="flex gap-3 px-4 py-4"><button className="font-medium text-blue-700 hover:underline" onClick={() => setEditing(ticket)}>Modifica</button><button aria-label={`Elimina ${ticket.title}`} className="text-red-700 hover:text-red-900" onClick={() => setDeleting(ticket)} title="Elimina" type="button">🗑</button></td></tr>; })}</tbody>
+            <table className="w-full min-w-[1050px] text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50"><tr>{["Titolo", "Cliente", "Tipo", "Priorità", "Stato", "Tracking", "Data stimata", "Azioni"].map((heading) => <th className="px-4 py-3 font-semibold" key={heading}>{heading}</th>)}</tr></thead>
+              <tbody>{tickets.map((ticket) => { const styles = getPriorityStyles(ticket.priority); return <tr className={`border-b border-l-4 border-slate-100 last:border-0 ${styles.border} ${styles.background}`} key={ticket.id}><td className="px-4 py-4 font-medium">{ticket.title}</td><td className="px-4 py-4">{ticket.client.name}<br /><span className="text-xs text-slate-600">{ticket.client.email}</span></td><td className="px-4 py-4">{ticket.type}</td><td className="px-4 py-4"><PriorityBadge priority={ticket.priority} /></td><td className="px-4 py-4">{statusLabels[ticket.status] || ticket.status}</td><td className="px-4 py-4"><code className="select-all rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{ticket.token}</code><br /><a className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline" href={`/t/${encodeURIComponent(ticket.token)}`} target="_blank" rel="noreferrer">Apri tracking</a></td><td className="px-4 py-4">{formatDate(ticket.dueDate)}</td><td className="flex gap-3 px-4 py-4"><button className="font-medium text-blue-700 hover:underline" onClick={() => setEditing(ticket)}>Modifica</button><button aria-label={`Elimina ${ticket.title}`} className="text-red-700 hover:text-red-900" onClick={() => setDeleting(ticket)} title="Elimina" type="button">🗑</button></td></tr>; })}</tbody>
             </table>
           )}
         </section>
