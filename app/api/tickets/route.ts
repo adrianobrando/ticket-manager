@@ -42,13 +42,20 @@ export async function POST(request: Request) {
       create: { email: clientEmail, name: clientName },
     });
 
+    const contract = contractId
+      ? await prisma.clientContract.findUnique({ where: { id: contractId }, select: { type: true } })
+      : null;
+    if (contractId && !contract) {
+      return NextResponse.json({ error: "Contratto non trovato" }, { status: 404 });
+    }
+
     const ticket = await prisma.ticket.create({
       data: {
         title,
         description,
         type,
         priority,
-        estimatedHours,
+        estimatedHours: contract?.type === "RETAINER" ? null : (estimatedHours ?? null),
         clientId: client.id,
         contractId: contractId ?? null,
       },

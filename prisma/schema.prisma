@@ -31,7 +31,8 @@ model Ticket {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   dueDate        DateTime?
-  estimatedHours Float           @default(0)
+  // Required for HOURLY tickets; RETAINER tickets receive a monthly allocation.
+  estimatedHours Float?
   actualHours    Float           @default(0)
   token          String          @unique @default(cuid())
   comments       Comment[]

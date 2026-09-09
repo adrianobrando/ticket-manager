@@ -62,7 +62,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       });
     }
 
-    if ("status" in data || "priority" in data || "estimatedHours" in data) {
+    if ("status" in data || "priority" in data || "estimatedHours" in data || "contractId" in data || "dueDate" in data) {
       const scheduled = await calculateSchedule();
       return NextResponse.json(
         scheduled.find((item) => item.id === ticket.id) ?? ticket,

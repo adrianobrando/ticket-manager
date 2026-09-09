@@ -10,7 +10,7 @@ export const createTicketSchema = z.object({
   clientName: nonEmptyString,
   clientEmail: z.email(),
   contractId: nonEmptyString.optional(),
-  estimatedHours: z.number().finite().min(0).optional().default(0),
+  estimatedHours: z.number().finite().min(0).nullable().optional(),
 });
 
 export const commentSchema = z.object({
@@ -22,7 +22,7 @@ export const updateTicketSchema = z
   .object({
     status: z.enum(["new", "open", "in_progress", "completed", "cancelled"]).optional(),
     priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
-    estimatedHours: z.number().finite().min(0).optional(),
+    estimatedHours: z.number().finite().min(0).nullable().optional(),
     actualHours: z.number().finite().min(0).optional(),
     contractId: nonEmptyString.nullable().optional(),
     // The admin form uses <input type="date"> (YYYY-MM-DD), while API
