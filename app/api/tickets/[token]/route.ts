@@ -18,6 +18,10 @@ export async function GET(_request: Request, context: RouteContext) {
         priority: true,
         createdAt: true,
         dueDate: true,
+        fixedPrice: true,
+        hourlyRate: true,
+        estimatedHours: true,
+        showPrice: true,
         comments: {
           select: { id: true, author: true, content: true, createdAt: true },
           orderBy: { createdAt: "asc" },
@@ -29,7 +33,21 @@ export async function GET(_request: Request, context: RouteContext) {
       return jsonError("Ticket non trovato", 404);
     }
 
-    return Response.json(ticket);
+    const calculatedPrice = ticket.fixedPrice ?? (
+      ticket.hourlyRate != null && ticket.estimatedHours != null
+        ? ticket.hourlyRate * ticket.estimatedHours
+        : null
+    );
+    return Response.json({
+      title: ticket.title,
+      description: ticket.description,
+      status: ticket.status,
+      priority: ticket.priority,
+      createdAt: ticket.createdAt,
+      dueDate: ticket.dueDate,
+      price: ticket.showPrice ? calculatedPrice : null,
+      comments: ticket.comments,
+    });
   } catch (error) {
     return handleRouteError(error);
   }

@@ -33,6 +33,9 @@ model Ticket {
   dueDate        DateTime?
   // Required for HOURLY tickets; RETAINER tickets receive a monthly allocation.
   estimatedHours Float?
+  hourlyRate     Float?
+  fixedPrice     Float?
+  showPrice      Boolean         @default(false)
   actualHours    Float           @default(0)
   token          String          @unique @default(cuid())
   comments       Comment[]

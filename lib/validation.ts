@@ -11,6 +11,9 @@ export const createTicketSchema = z.object({
   clientEmail: z.email(),
   contractId: nonEmptyString.optional(),
   estimatedHours: z.number().finite().min(0).nullable().optional(),
+  hourlyRate: z.number().finite().min(0).nullable().optional(),
+  fixedPrice: z.number().finite().min(0).nullable().optional(),
+  showPrice: z.boolean().optional(),
 });
 
 export const commentSchema = z.object({

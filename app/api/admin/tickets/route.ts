@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       where,
       select: {
        id: true, title: true, token: true, type: true, priority: true, status: true, contractId: true,
-       createdAt: true, dueDate: true, estimatedHours: true,
+       createdAt: true, dueDate: true, estimatedHours: true, hourlyRate: true, fixedPrice: true, showPrice: true,
        client: { select: { id: true, name: true, email: true } },
        contract: { select: { id: true, name: true, type: true, monthlyHoursIncluded: true } },
        scheduledTask: { select: { startDate: true, endDate: true, sortOrder: true } },

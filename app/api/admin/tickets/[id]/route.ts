@@ -38,7 +38,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         data,
         select: {
           id: true, title: true, token: true, status: true, priority: true,
-          estimatedHours: true, dueDate: true,
+          estimatedHours: true, dueDate: true, hourlyRate: true, fixedPrice: true, showPrice: true,
           client: { select: { name: true, email: true } },
         },
       });

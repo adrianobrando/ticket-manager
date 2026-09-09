@@ -18,6 +18,7 @@ type Ticket = {
   priority: string;
   createdAt: string;
   dueDate: string | null;
+  price: number | null;
   comments: Comment[];
 };
 
@@ -41,6 +42,13 @@ function formatDate(value: string | null) {
     dateStyle: "long",
     timeStyle: "short",
   }).format(date);
+}
+
+function formatPrice(value: number) {
+  return new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(value);
 }
 
 export default function TicketTrackingPage({
@@ -226,6 +234,12 @@ export default function TicketTrackingPage({
               <dt className="text-sm text-slate-500">Completamento stimato</dt>
               <dd className="mt-1 font-medium">{formatDate(ticket.dueDate)}</dd>
             </div>
+            {ticket.price != null && (
+              <div>
+                <dt className="text-sm text-slate-500">Prezzo</dt>
+                <dd className="mt-1 font-medium">{formatPrice(ticket.price)}</dd>
+              </div>
+            )}
           </dl>
           {ticket.status === "new" && (
             <button className="mt-8 rounded-lg border border-red-200 px-4 py-2 font-medium text-red-700 hover:bg-red-50" onClick={() => setShowDeleteModal(true)} type="button">
