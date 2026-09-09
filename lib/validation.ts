@@ -26,6 +26,9 @@ export const updateTicketSchema = z
     status: z.enum(["new", "open", "in_progress", "completed", "cancelled"]).optional(),
     priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
     estimatedHours: z.number().finite().min(0).nullable().optional(),
+    hourlyRate: z.number().finite().min(0).nullable().optional(),
+    fixedPrice: z.number().finite().min(0).nullable().optional(),
+    showPrice: z.boolean().optional(),
     actualHours: z.number().finite().min(0).optional(),
     contractId: nonEmptyString.nullable().optional(),
     // The admin form uses <input type="date"> (YYYY-MM-DD), while API
