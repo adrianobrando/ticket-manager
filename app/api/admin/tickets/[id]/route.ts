@@ -19,6 +19,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const input = updateTicketSchema.parse(body.data);
     const data = {
       ...input,
+      ...(input.estimatedHours === null ? { estimatedHours: 0 } : {}),
       ...(input.dueDate !== undefined ? { dueDate: input.dueDate ? new Date(input.dueDate) : null } : {}),
       ...(input.contractId !== undefined ? { contractId: input.contractId } : {}),
     };

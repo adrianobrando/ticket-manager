@@ -162,23 +162,25 @@ function allocateHours(
 }
 
 export async function calculateSchedule(now = new Date()): Promise<ScheduleResult[]> {
-  const [ticketsFromDatabase, workLogs, timeEntries] = await Promise.all([
-    prisma.ticket.findMany({
-      where: { status: { notIn: EXCLUDED_STATUSES } },
-      select: {
-        id: true, token: true, title: true, priority: true, status: true, createdAt: true,
-        dueDate: true, estimatedHours: true,
-        client: { select: { name: true, email: true } },
-        contract: {
-          select: { id: true, type: true, monthlyHoursIncluded: true, startDate: true, endDate: true, isActive: true },
-        },
+  // Keep the reads on the shared pool's connection lifecycle predictable in
+  // serverless runtimes; the planner is run frequently after ticket changes.
+  const ticketsFromDatabase = await prisma.ticket.findMany({
+    where: { status: { notIn: EXCLUDED_STATUSES } },
+    select: {
+      id: true, token: true, title: true, priority: true, status: true, createdAt: true,
+      dueDate: true, estimatedHours: true,
+      client: { select: { name: true, email: true } },
+      contract: {
+        select: { id: true, type: true, monthlyHoursIncluded: true, startDate: true, endDate: true, isActive: true },
       },
-    }),
-    prisma.workLog.findMany({ select: { ticketId: true, date: true, duration: true } }),
-    prisma.timeEntry.findMany({
-      select: { ticketId: true, contractId: true, date: true, durationHours: true },
-    }),
-  ]);
+    },
+  });
+  const workLogs = await prisma.workLog.findMany({
+    select: { ticketId: true, date: true, duration: true },
+  });
+  const timeEntries = await prisma.timeEntry.findMany({
+    select: { ticketId: true, contractId: true, date: true, durationHours: true },
+  });
 
   const workedHours = new Map<string, number>();
   for (const entry of workLogs) {

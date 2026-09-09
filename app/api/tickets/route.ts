@@ -55,7 +55,10 @@ export async function POST(request: Request) {
         description,
         type,
         priority,
-        estimatedHours: contract?.type === "RETAINER" ? null : (estimatedHours ?? null),
+        // Production databases created before the retainer migration still
+        // enforce NOT NULL. Retainer scheduling is contract-based, so zero is
+        // a safe compatibility value until that migration is applied.
+        estimatedHours: contract?.type === "RETAINER" ? 0 : (estimatedHours ?? 0),
         clientId: client.id,
         contractId: contractId ?? null,
       },
