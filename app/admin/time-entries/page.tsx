@@ -36,6 +36,8 @@ export default function TimeEntriesPage() {
   const [message, setMessage] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Entry | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   async function request(path: string, init?: RequestInit) {
     const response = await fetch(path, {
@@ -75,6 +77,8 @@ export default function TimeEntriesPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving) return;
+    setIsSaving(true);
     setError("");
     setMessage("");
     try {
@@ -96,19 +100,25 @@ export default function TimeEntriesPage() {
       setShowForm(false);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Registrazione non riuscita.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
   async function remove(id: string) {
     if (!window.confirm("Eliminare questa registrazione?")) return;
+    if (isDeleting) return;
+    setIsDeleting(true);
     try {
       await request(`/api/admin/time-entries/${id}`, { method: "DELETE" });
       await load();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Eliminazione non riuscita.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
   const total = entries.reduce((sum, entry) => sum + entry.durationHours, 0);
-  return <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900 sm:px-6"><div className="mx-auto max-w-4xl space-y-6"><header><p className="text-sm font-semibold uppercase tracking-widest text-blue-600">Amministrazione</p><h1 className="mt-1 text-3xl font-bold">Registro attività</h1></header>{message && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-emerald-700">{message}</p>}{error && <p className="rounded-lg bg-red-50 px-4 py-3 text-red-700">{error}</p>}<button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white" onClick={() => { setEditing(null); setShowForm(true); setMessage(""); setError(""); }} type="button">Nuova attività</button>{showForm && <form className="grid gap-4 rounded-2xl bg-white p-6 sm:grid-cols-2" onSubmit={save}><label className="text-sm font-medium">Ticket<select className={`${inputClass} mt-2`} onChange={(event) => setTicketId(event.target.value)} required value={ticketId}><option value="">Seleziona ticket</option>{tickets.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.title} — {ticket.client.name}</option>)}</select></label><label className="text-sm font-medium">Data<input className={`${inputClass} mt-2`} onChange={(event) => { const value = event.target.value; setDate(value); void load(value); }} required type="date" value={date} /></label><label className="text-sm font-medium">Ora inizio<input className={`${inputClass} mt-2`} onChange={(event) => setStartTime(event.target.value)} required type="time" value={startTime} /></label><label className="text-sm font-medium">Ora fine<input className={`${inputClass} mt-2`} onChange={(event) => setEndTime(event.target.value)} required type="time" value={endTime} /></label><label className="text-sm font-medium sm:col-span-2">Nota<textarea className={`${inputClass} mt-2`} onChange={(event) => setNote(event.target.value)} value={note} /></label><div className="flex gap-3 sm:col-span-2"><button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white" type="submit">{editing ? "Salva modifiche" : "Registra ore"}</button><button className="rounded-lg border border-slate-300 px-5 py-3 font-semibold" onClick={() => { setEditing(null); setShowForm(false); }} type="button">Annulla</button></div></form>}<section className="rounded-2xl bg-white p-6 shadow-sm"><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Attività del giorno</h2><strong>{total.toFixed(2)} h totali</strong></div><div className="mt-4 divide-y divide-slate-200">{entries.length === 0 ? <p className="text-sm text-slate-500">Nessuna attività.</p> : entries.map((entry) => <div className="flex flex-wrap justify-between gap-3 py-4 first:pt-0" key={entry.id}><div><p className="font-semibold">{formatTime(entry.startTime)} – {formatTime(entry.endTime)} · {entry.durationHours.toFixed(2)} h</p><p className="text-sm">{entry.ticket.title} <span className="text-slate-500">· {entry.ticket.client.name}</span></p>{entry.note && <p className="text-sm text-slate-500">{entry.note}</p>}</div><div className="flex gap-3"><button className="text-sm font-medium text-blue-700" onClick={() => { setEditing(entry); setTicketId(entry.ticketId ?? ""); setDate(entry.date.slice(0, 10)); setStartTime(entry.startTime.slice(11, 16)); setEndTime(entry.endTime.slice(11, 16)); setNote(entry.note ?? ""); setShowForm(true); }} type="button">Modifica</button><button className="text-sm font-medium text-red-700" onClick={() => void remove(entry.id)} type="button">Elimina</button></div></div>)}</div></section></div></main>;
+  return <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900 sm:px-6"><div className="mx-auto max-w-4xl space-y-6"><header><p className="text-sm font-semibold uppercase tracking-widest text-blue-600">Amministrazione</p><h1 className="mt-1 text-3xl font-bold">Registro attività</h1></header>{message && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-emerald-700">{message}</p>}{error && <p className="rounded-lg bg-red-50 px-4 py-3 text-red-700">{error}</p>}<button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white" onClick={() => { setEditing(null); setShowForm(true); setMessage(""); setError(""); }} type="button">Nuova attività</button>{showForm && <form className="grid gap-4 rounded-2xl bg-white p-6 sm:grid-cols-2" onSubmit={save}><label className="text-sm font-medium">Ticket<select className={`${inputClass} mt-2`} onChange={(event) => setTicketId(event.target.value)} required value={ticketId}><option value="">Seleziona ticket</option>{tickets.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.title} — {ticket.client.name}</option>)}</select></label><label className="text-sm font-medium">Data<input className={`${inputClass} mt-2`} onChange={(event) => { const value = event.target.value; setDate(value); void load(value); }} required type="date" value={date} /></label><label className="text-sm font-medium">Ora inizio<input className={`${inputClass} mt-2`} onChange={(event) => setStartTime(event.target.value)} required type="time" value={startTime} /></label><label className="text-sm font-medium">Ora fine<input className={`${inputClass} mt-2`} onChange={(event) => setEndTime(event.target.value)} required type="time" value={endTime} /></label><label className="text-sm font-medium sm:col-span-2">Nota<textarea className={`${inputClass} mt-2`} onChange={(event) => setNote(event.target.value)} value={note} /></label><div className="flex gap-3 sm:col-span-2"><button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? "Salvataggio..." : editing ? "Salva modifiche" : "Registra ore"}</button><button className="rounded-lg border border-slate-300 px-5 py-3 font-semibold" disabled={isSaving} onClick={() => { setEditing(null); setShowForm(false); }} type="button">Annulla</button></div></form>}<section className="rounded-2xl bg-white p-6 shadow-sm"><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Attività del giorno</h2><strong>{total.toFixed(2)} h totali</strong></div><div className="mt-4 divide-y divide-slate-200">{entries.length === 0 ? <p className="text-sm text-slate-500">Nessuna attività.</p> : entries.map((entry) => <div className="flex flex-wrap justify-between gap-3 py-4 first:pt-0" key={entry.id}><div><p className="font-semibold">{formatTime(entry.startTime)} – {formatTime(entry.endTime)} · {entry.durationHours.toFixed(2)} h</p><p className="text-sm">{entry.ticket.title} <span className="text-slate-500">· {entry.ticket.client.name}</span></p>{entry.note && <p className="text-sm text-slate-500">{entry.note}</p>}</div><div className="flex gap-3"><button className="text-sm font-medium text-blue-700" onClick={() => { setEditing(entry); setTicketId(entry.ticketId ?? ""); setDate(entry.date.slice(0, 10)); setStartTime(entry.startTime.slice(11, 16)); setEndTime(entry.endTime.slice(11, 16)); setNote(entry.note ?? ""); setShowForm(true); }} type="button">Modifica</button><button className="text-sm font-medium text-red-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isDeleting} onClick={() => void remove(entry.id)} type="button">{isDeleting ? "Eliminazione..." : "Elimina"}</button></div></div>)}</div></section></div></main>;
 }

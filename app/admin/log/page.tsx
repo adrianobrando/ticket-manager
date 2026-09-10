@@ -47,7 +47,8 @@ export default function WorkLogPage() {
   const [endTime, setEndTime] = useState("");
   const [ticketId, setTicketId] = useState("");
   const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -63,7 +64,6 @@ export default function WorkLogPage() {
   }
 
   async function loadData(selectedDate = date) {
-    setLoading(true);
     setError("");
     try {
       const [ticketResult, worklogResult] = await Promise.all([
@@ -78,8 +78,6 @@ export default function WorkLogPage() {
         return;
       }
       setError(loadError instanceof Error ? loadError.message : "Accesso non riuscito.");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -92,6 +90,8 @@ export default function WorkLogPage() {
 
   async function saveWorkLog(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving) return;
+    setIsSaving(true);
     setError("");
     setMessage("");
     try {
@@ -110,11 +110,15 @@ export default function WorkLogPage() {
       await loadData();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Registrazione non riuscita.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
   async function deleteWorkLog(id: string) {
     if (!window.confirm("Eliminare questa attività?")) return;
+    if (isDeleting) return;
+    setIsDeleting(true);
     setError("");
     try {
       await request(`/api/admin/worklogs/${id}`, { method: "DELETE" });
@@ -122,6 +126,8 @@ export default function WorkLogPage() {
       await loadData();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Eliminazione non riuscita.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -161,8 +167,8 @@ export default function WorkLogPage() {
             Note <span className="font-normal text-slate-500">(opzionale)</span>
             <textarea className={`${inputClass} mt-2 min-h-24`} onChange={(event) => setNotes(event.target.value)} value={notes} />
           </label>
-          <button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50" disabled={loading} type="submit">
-            Registra attività
+          <button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">
+            {isSaving ? "Registrazione..." : "Registra attività"}
           </button>
         </form>
 
@@ -180,7 +186,7 @@ export default function WorkLogPage() {
                     <p className="text-sm text-slate-700">{worklog.ticket.title} <span className="text-slate-500">· {worklog.ticket.client.name}</span></p>
                     {worklog.notes && <p className="mt-1 text-sm text-slate-500">{worklog.notes}</p>}
                   </div>
-                  <button className="text-sm font-medium text-red-700 hover:text-red-900" onClick={() => void deleteWorkLog(worklog.id)} type="button">Elimina</button>
+                  <button className="text-sm font-medium text-red-700 hover:text-red-900 disabled:cursor-not-allowed disabled:opacity-60" disabled={isDeleting} onClick={() => void deleteWorkLog(worklog.id)} type="button">{isDeleting ? "Eliminazione..." : "Elimina"}</button>
                 </div>
               ))}
             </div>

@@ -25,6 +25,8 @@ export default function ContractsPage() {
   const [editing, setEditing] = useState<Contract | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   async function request(path: string, init?: RequestInit) {
     const response = await fetch(path, {
@@ -76,6 +78,8 @@ export default function ContractsPage() {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSaving) return;
+    setIsSaving(true);
     setError("");
     setMessage("");
     const form = event.currentTarget;
@@ -100,11 +104,15 @@ export default function ContractsPage() {
       setMessage(editing ? "Contratto aggiornato." : "Contratto creato.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Creazione non riuscita.");
+    } finally {
+      setIsSaving(false);
     }
   }
 
   async function remove(id: string) {
     if (!window.confirm("Eliminare questo contratto?")) return;
+    if (isDeleting) return;
+    setIsDeleting(true);
     setError("");
     setMessage("");
     try {
@@ -114,6 +122,8 @@ export default function ContractsPage() {
       setMessage("Contratto eliminato.");
     } catch (removeError) {
       setError(removeError instanceof Error ? removeError.message : "Eliminazione non riuscita.");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -133,11 +143,11 @@ export default function ContractsPage() {
           <label className="block text-sm font-medium">Inizio<input className="mt-2 w-full rounded-lg border px-3 py-2.5" defaultValue={editing?.startDate.slice(0, 10) ?? ""} name="startDate" required type="date" /></label>
           <label className="block text-sm font-medium">Fine<input className="mt-2 w-full rounded-lg border px-3 py-2.5" defaultValue={editing?.endDate?.slice(0, 10) ?? ""} name="endDate" type="date" /></label>
         </div>
-        <div className="flex gap-3"><button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white" type="submit">{editing ? "Salva modifiche" : "Crea contratto"}</button>{editing && <button className="rounded-lg border border-slate-300 px-5 py-3 font-semibold" onClick={() => setEditing(null)} type="button">Annulla</button>}</div>
+        <div className="flex gap-3"><button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? "Salvataggio..." : editing ? "Salva modifiche" : "Crea contratto"}</button>{editing && <button className="rounded-lg border border-slate-300 px-5 py-3 font-semibold" disabled={isSaving} onClick={() => setEditing(null)} type="button">Annulla</button>}</div>
       </form>
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold">Contratti esistenti</h2>
-        <div className="mt-4 divide-y divide-slate-200">{contracts.length === 0 ? <p className="text-sm text-slate-500">Nessun contratto.</p> : contracts.map((contract) => <div className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0" key={contract.id}><div><p className="font-semibold">{contract.name}</p>{contract.type === "RETAINER" ? <p className="text-sm text-slate-500">{contract.client.name} · {contract.hourlyRate.toFixed(2)} €/h</p> : <p className="text-sm text-slate-500">{contract.client.name} · {contract.hourlyRate.toFixed(2)} €/h · {contract.registeredHours.toFixed(2)} h registrate questo mese</p>}{contract.type === "RETAINER" && <p className="mt-1 text-sm"><span className="font-medium">Incluse mensili:</span> {contract.monthlyHoursIncluded?.toFixed(2) ?? "0.00"} h · <span className="font-medium">Consumate questo mese:</span> {contract.registeredHours.toFixed(2)} h · <span className="font-medium">Rimanenti questo mese:</span> {contract.remainingHours.toFixed(2)} h</p>}</div><div className="flex gap-3"><button className="text-sm font-medium text-blue-700" onClick={() => setEditing(contract)} type="button">Modifica</button><button className="text-sm font-medium text-red-700" onClick={() => void remove(contract.id)} type="button">Elimina</button></div></div>)}</div>
+        <div className="mt-4 divide-y divide-slate-200">{contracts.length === 0 ? <p className="text-sm text-slate-500">Nessun contratto.</p> : contracts.map((contract) => <div className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0" key={contract.id}><div><p className="font-semibold">{contract.name}</p>{contract.type === "RETAINER" ? <p className="text-sm text-slate-500">{contract.client.name} · {contract.hourlyRate.toFixed(2)} €/h</p> : <p className="text-sm text-slate-500">{contract.client.name} · {contract.hourlyRate.toFixed(2)} €/h · {contract.registeredHours.toFixed(2)} h registrate questo mese</p>}{contract.type === "RETAINER" && <p className="mt-1 text-sm"><span className="font-medium">Incluse mensili:</span> {contract.monthlyHoursIncluded?.toFixed(2) ?? "0.00"} h · <span className="font-medium">Consumate questo mese:</span> {contract.registeredHours.toFixed(2)} h · <span className="font-medium">Rimanenti questo mese:</span> {contract.remainingHours.toFixed(2)} h</p>}</div><div className="flex gap-3"><button className="text-sm font-medium text-blue-700" disabled={isDeleting} onClick={() => setEditing(contract)} type="button">Modifica</button><button className="text-sm font-medium text-red-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isDeleting} onClick={() => void remove(contract.id)} type="button">{isDeleting ? "Eliminazione..." : "Elimina"}</button></div></div>)}</div>
       </section>
       </div>
     </main>
