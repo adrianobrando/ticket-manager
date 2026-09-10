@@ -14,6 +14,14 @@ export const createTicketSchema = z.object({
   hourlyRate: z.number().finite().min(0).nullable().optional(),
   fixedPrice: z.number().finite().min(0).nullable().optional(),
   showPrice: z.boolean().optional(),
+  dueDate: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (!val || val.trim() === "") return null;
+      const date = new Date(val);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }),
 });
 
 export const commentSchema = z.object({

@@ -190,6 +190,25 @@ export default function NewTicketForm({ turnstileSiteKey }: NewTicketFormProps) 
               </FormLabel>
             </div>
 
+<FormLabel>
+  <span className="mb-2 block text-sm font-medium">
+    Data di consegna desiderata{" "}
+    <span className="text-xs font-normal text-slate-500">(consigliato)</span>
+  </span>
+  <input
+    className={inputClass}
+    name="dueDate"
+    type="date"
+    min={new Date().toISOString().split("T")[0]}
+  />
+  <p className="mt-1 text-xs text-slate-500">
+    Se non hai una data precisa, puoi lasciare vuoto.
+  </p>
+</FormLabel>
+
+
+
+
             <div aria-label="Verifica anti-spam">
               {turnstileSiteKey ? (
                 <Turnstile
