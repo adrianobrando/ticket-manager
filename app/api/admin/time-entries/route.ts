@@ -4,8 +4,17 @@ import { prisma } from "@/lib/prisma";
 import { calculateSchedule } from "@/lib/scheduler";
 import { timeEntrySchema } from "@/lib/validation";
 
+// Time entries are entered/displayed as plain wall-clock values ("14:00" means
+// "14:00", full stop). Naive date/time strings (no trailing "Z" or offset) are
+// forced to be parsed as UTC so the stored instant never depends on the
+// server's local timezone (UTC on Vercel vs. Europe/Rome locally). Without
+// this, the same "14:00" string was interpreted differently by the server
+// process than by the browser that later formats it, shifting the displayed
+// time by the timezone offset (e.g. +2h in CEST).
 function parseDate(value: string) {
-  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+  const withUtcMarker = /Z$|[+-]\d{2}:\d{2}$/.test(normalized) ? normalized : `${normalized}Z`;
+  const date = new Date(withUtcMarker);
   if (Number.isNaN(date.getTime())) throw new ValidationError("Formato data non valido");
   return date;
 }

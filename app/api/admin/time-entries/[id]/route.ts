@@ -6,8 +6,12 @@ import { timeEntrySchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+// Same fix as in ../route.ts: pin naive date/time strings to UTC so the
+// stored value doesn't shift depending on the server's local timezone.
 function parseDate(value: string) {
-  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+  const withUtcMarker = /Z$|[+-]\d{2}:\d{2}$/.test(normalized) ? normalized : `${normalized}Z`;
+  const date = new Date(withUtcMarker);
   if (Number.isNaN(date.getTime())) throw new ValidationError("Formato data non valido");
   return date;
 }

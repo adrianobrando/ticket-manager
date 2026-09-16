@@ -28,10 +28,14 @@ const startOfWeek = () => {
   date.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
   return dateKey(date);
 };
+// Start/end times are saved as literal wall-clock values pinned to UTC (see
+// the API routes). Formatting with timeZone: "UTC" avoids re-applying the
+// browser's local timezone offset on top, which was the cause of the +2h
+// shift (e.g. 14:00 saved -> displayed as 16:00 in CEST).
 const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("it-IT", { dateStyle: "medium" }).format(new Date(`${value.slice(0, 10)}T12:00:00`));
+  new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`));
 const formatTime = (value: string) =>
-  new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(value));
 
 export default function TimeEntriesPage() {
   const router = useRouter();
