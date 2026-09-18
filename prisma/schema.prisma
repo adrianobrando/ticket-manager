@@ -8,43 +8,55 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum TicketStato {
+  todo
+  in_progress
+  review
+  done
 }
 
 model Client {
-  id        String   @id @default(cuid())
+  id        String           @id @default(cuid())
   name      String
-  email     String   @unique
-  createdAt DateTime @default(now())
+  email     String           @unique
+  createdAt DateTime         @default(now())
   tickets   Ticket[]
   contracts ClientContract[]
 }
 
 model Ticket {
-  id             String          @id @default(cuid())
-  title          String
-  description    String
-  type           String
-  priority       String          @default("normal")
-  status         String          @default("new")
-  clientId       String
-  client         Client          @relation(fields: [clientId], references: [id])
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  dueDate        DateTime?
+  id              String          @id @default(cuid())
+  title           String
+  description     String
+  type            String
+  priority        String          @default("normal")
+  status          String          @default("new")
+  clientId        String
+  client          Client          @relation(fields: [clientId], references: [id])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  dueDate         DateTime?
   // Required for HOURLY tickets; RETAINER tickets receive a monthly allocation.
-  estimatedHours Float?
-  hourlyRate     Float?
-  fixedPrice     Float?
-  showPrice      Boolean         @default(false)
-  actualHours    Float           @default(0)
-  token          String          @unique @default(cuid())
-  comments       Comment[]
-  scheduledTask  ScheduledTask?
-  workDays       WorkDay[]
-  workLogs       WorkLog[]
-  contractId     String?
-  contract       ClientContract? @relation(fields: [contractId], references: [id])
-  timeEntries    TimeEntry[]
+  estimatedHours  Float?
+  hourlyRate      Float?
+  fixedPrice      Float?
+  showPrice       Boolean         @default(false)
+  actualHours     Float           @default(0)
+  oreStimate      Float?
+  oreConsuntivate Float           @default(0)
+  stato           TicketStato     @default(todo)
+  token           String          @unique @default(cuid())
+  comments        Comment[]
+  scheduledTask   ScheduledTask?
+  workDays        WorkDay[]
+  workLogs        WorkLog[]
+  contractId      String?
+  contract        ClientContract? @relation(fields: [contractId], references: [id])
+  timeEntries     TimeEntry[]
 
   @@index([clientId])
   @@index([status])
@@ -54,38 +66,39 @@ model Ticket {
 }
 
 model ClientContract {
-  id                    String   @id @default(cuid())
-  clientId              String
-  client                Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  name                  String
-  type                  String
-  monthlyHoursIncluded  Float?
-  hourlyRate            Float
-  startDate             DateTime
-  endDate               DateTime?
-  isActive               Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  tickets               Ticket[]
-  timeEntries           TimeEntry[]
+  id                   String      @id @default(cuid())
+  clientId             String
+  client               Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name                 String
+  type                 String
+  monthlyHoursIncluded Float?
+  hourlyRate           Float
+  startDate            DateTime
+  endDate              DateTime?
+  isActive             Boolean     @default(true)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  tickets              Ticket[]
+  timeEntries          TimeEntry[]
 
   @@index([clientId])
   @@index([isActive])
 }
 
 model TimeEntry {
-  id            String          @id @default(cuid())
-  ticketId      String
-  ticket        Ticket          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  contractId    String?
-  contract      ClientContract? @relation(fields: [contractId], references: [id])
-  userId        String?
-  date          DateTime
-  startTime     DateTime
-  endTime       DateTime
-  durationHours Float
-  note          String?
-  createdAt     DateTime        @default(now())
+  id              String          @id @default(cuid())
+  ticketId        String
+  ticket          Ticket          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  contractId      String?
+  contract        ClientContract? @relation(fields: [contractId], references: [id])
+  userId          String?
+  date            DateTime
+  startTime       DateTime
+  endTime         DateTime
+  durationHours   Float
+  note            String?
+  visibileCliente Boolean         @default(false)
+  createdAt       DateTime        @default(now())
 
   @@index([ticketId])
   @@index([contractId])
@@ -131,15 +144,16 @@ model WorkDay {
 }
 
 model WorkLog {
-  id        String   @id @default(cuid())
-  date      DateTime
-  startTime DateTime
-  endTime   DateTime
-  duration  Float
-  ticketId  String
-  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  notes     String?
-  createdAt DateTime @default(now())
+  id              String   @id @default(cuid())
+  date            DateTime
+  startTime       DateTime
+  endTime         DateTime
+  duration        Float
+  ticketId        String
+  ticket          Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  notes           String?
+  visibileCliente Boolean  @default(false)
+  createdAt       DateTime @default(now())
 
   @@index([date])
   @@index([ticketId])
