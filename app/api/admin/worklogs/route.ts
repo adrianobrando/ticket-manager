@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { calculateSchedule } from "@/lib/scheduler";
 import { createWorkLogSchema } from "@/lib/validation";
 
+export const runtime = 'nodejs';
+
 function parseDate(value: string, field: string) {
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
     ? new Date(`${value}T00:00:00`)

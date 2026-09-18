@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { calculateSchedule } from "@/lib/scheduler";
 import { timeEntrySchema } from "@/lib/validation";
 
+export const runtime = 'nodejs';
+
 type RouteContext = { params: Promise<{ id: string }> };
 
 // Same fix as in ../route.ts: pin naive date/time strings to UTC so the

@@ -3,6 +3,8 @@ import { requireAdminPassword } from "@/lib/admin-auth";
 import { calculateSchedule } from "@/lib/scheduler";
 import { NextResponse } from "next/server";
 
+export const runtime = 'nodejs';
+
 export async function POST(request: Request) {
   try {
     const authError = requireAdminPassword(request);

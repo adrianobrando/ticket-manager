@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { calculateSchedule } from "@/lib/scheduler";
 import { NextResponse } from "next/server";
 
+export const runtime = 'nodejs';
+
 type RouteContext = { params: Promise<{ token: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -21,6 +23,10 @@ export async function GET(_request: Request, context: RouteContext) {
         fixedPrice: true,
         hourlyRate: true,
         estimatedHours: true,
+        // fields for client tracking / progress
+        oreStimate: true,
+        oreConsuntivate: true,
+        stato: true,
         showPrice: true,
         comments: {
           select: { id: true, author: true, content: true, createdAt: true },
@@ -47,6 +53,10 @@ export async function GET(_request: Request, context: RouteContext) {
       dueDate: ticket.dueDate,
       price: ticket.showPrice ? calculatedPrice : null,
       comments: ticket.comments,
+      // hour tracking fields for client progress UI
+      oreStimate: ticket.oreStimate,
+      oreConsuntivate: ticket.oreConsuntivate,
+      stato: ticket.stato,
     });
   } catch (error) {
     return handleRouteError(error);

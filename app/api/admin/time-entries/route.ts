@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { calculateSchedule } from "@/lib/scheduler";
 import { timeEntrySchema } from "@/lib/validation";
 
+export const runtime = 'nodejs';
+
 // Time entries are entered/displayed as plain wall-clock values ("14:00" means
 // "14:00", full stop). Naive date/time strings (no trailing "Z" or offset) are
 // forced to be parsed as UTC so the stored instant never depends on the

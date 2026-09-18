@@ -9,6 +9,8 @@ import {
   verifyAdminPassword,
 } from "@/lib/admin-auth";
 
+export const runtime = 'nodejs';
+
 export async function POST(request: Request) {
   if (isLoginRateLimited(request)) {
     return jsonError("Troppi tentativi. Riprova tra qualche minuto.", 429);

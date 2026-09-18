@@ -7,6 +7,8 @@ import {
 import { prisma } from "@/lib/prisma";
 import { commentSchema } from "@/lib/validation";
 
+export const runtime = 'nodejs';
+
 type RouteContext = { params: Promise<{ token: string }> };
 
 export async function POST(request: Request, context: RouteContext) {

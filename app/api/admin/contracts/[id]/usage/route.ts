@@ -2,6 +2,8 @@ import { handleRouteError, jsonError } from "@/lib/api";
 import { requireAdminPassword } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = 'nodejs';
+
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: Request, context: RouteContext) {

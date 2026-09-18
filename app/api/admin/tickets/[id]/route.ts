@@ -6,6 +6,8 @@ import { calculateSchedule } from "@/lib/scheduler";
 import { sendTicketStatusChangedEmail } from "@/lib/email";
 import { updateTicketSchema } from "@/lib/validation";
 
+export const runtime = 'nodejs';
+
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: RouteContext) {

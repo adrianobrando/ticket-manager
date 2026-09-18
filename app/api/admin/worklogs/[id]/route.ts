@@ -3,6 +3,8 @@ import { requireAdminPassword } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { calculateSchedule } from "@/lib/scheduler";
 
+export const runtime = 'nodejs';
+
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function DELETE(request: Request, context: RouteContext) {

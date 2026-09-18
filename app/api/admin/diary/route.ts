@@ -2,6 +2,8 @@ import { handleRouteError, jsonError } from "@/lib/api";
 import { requireAdminPassword } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = 'nodejs';
+
 function parseDate(value: string | null, fallback: Date) {
   if (!value) return fallback;
   const parsed = new Date(`${value}T00:00:00`);

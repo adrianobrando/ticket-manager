@@ -5,6 +5,8 @@ import { calculateSchedule } from "@/lib/scheduler";
 import { sendTicketCreatedEmail } from "@/lib/email";
 import { createTicketSchema } from "@/lib/validation";
 
+export const runtime = 'nodejs';
+
 async function verifyTurnstile(token: string) {
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) return false;

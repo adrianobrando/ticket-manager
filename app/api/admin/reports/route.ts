@@ -2,6 +2,8 @@ import { handleRouteError, jsonError, ValidationError } from "@/lib/api";
 import { requireAdminPassword } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = 'nodejs';
+
 function parseDate(value: string, field: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new ValidationError(`Formato data non valido per "${field}"`);
