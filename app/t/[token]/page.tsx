@@ -3,6 +3,7 @@
 import { FormEvent, use, useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge, Card, FormLabel, getPriorityStyles, inputClass, PriorityBadge } from "@/app/components/ui";
+import { TicketProgress } from "@/app/components/TicketProgress";
 
 type Comment = {
   id: string;
@@ -20,6 +21,10 @@ type Ticket = {
   dueDate: string | null;
   price: number | null;
   comments: Comment[];
+  // fields returned by API for progress tracking
+  oreStimate: number | null;
+  oreConsuntivate: number;
+  stato: "todo" | "in_progress" | "review" | "done";
 };
 
 type ApiError = {
@@ -220,6 +225,15 @@ export default function TicketTrackingPage({
           </div>
 
           <p className="mt-6 whitespace-pre-wrap text-slate-700">{ticket.description}</p>
+
+          {/* Progresso del ticket (ore stimate/consuntivate) */}
+          <div className="mt-6">
+            <TicketProgress
+              oreStimate={ticket.oreStimate}
+              oreConsuntivate={ticket.oreConsuntivate}
+              stato={ticket.stato}
+            />
+          </div>
 
           <dl className="mt-8 grid gap-5 border-t border-slate-200 pt-6 sm:grid-cols-2">
             <div>
