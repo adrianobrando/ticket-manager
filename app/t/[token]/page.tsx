@@ -2,7 +2,7 @@
 
 import { FormEvent, use, useEffect, useState } from "react";
 import Link from "next/link";
-import { Badge, Card, FormLabel, getPriorityStyles, inputClass, PriorityBadge } from "@/app/components/ui";
+import { Card, FormLabel, getPriorityStyles, inputClass, PriorityBadge } from "@/app/components/ui";
 import { TicketProgress } from "@/app/components/TicketProgress";
 
 type Comment = {
@@ -219,9 +219,6 @@ export default function TicketTrackingPage({
               </p>
               <h1 className="mt-2 text-3xl font-bold tracking-tight">{ticket.title}</h1>
             </div>
-            <Badge className="bg-blue-100 text-blue-800">
-              {statusLabels[ticket.status] || ticket.status}
-            </Badge>
           </div>
 
           <p className="mt-6 whitespace-pre-wrap text-slate-700">{ticket.description}</p>
