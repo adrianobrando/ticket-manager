@@ -27,7 +27,7 @@ type TicketForSchedule = {
   status: string;
   createdAt: Date;
   dueDate: Date | null;
-  estimatedHours: number | null;
+  oreStimate: number | null;
   client: { name: string; email: string };
   contract: {
     id: string;
@@ -168,7 +168,7 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
     where: { status: { notIn: EXCLUDED_STATUSES } },
     select: {
       id: true, token: true, title: true, priority: true, status: true, createdAt: true,
-      dueDate: true, estimatedHours: true,
+      dueDate: true, oreStimate: true,
       client: { select: { name: true, email: true } },
       contract: {
         select: { id: true, type: true, monthlyHoursIncluded: true, startDate: true, endDate: true, isActive: true },
@@ -200,10 +200,10 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
 
   // Hourly contracts retain the old finite-estimate behavior.
   const hourlyTickets = tickets.filter((ticket) => ticket.contract?.type !== "RETAINER"
-    && (ticket.estimatedHours ?? 0) - (workedHours.get(ticket.id) ?? 0) > 0);
+    && (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0) > 0);
   hourlyTickets.sort(compareTickets);
   for (const ticket of hourlyTickets) {
-    const remaining = Math.max(0, (ticket.estimatedHours ?? 0) - (workedHours.get(ticket.id) ?? 0));
+    const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
     const end = ticket.dueDate ?? new Date(now.getTime() + Math.max(1, Math.ceil(remaining / WORK_HOURS_PER_DAY)) * 86400000);
     const days = workDaysBetween(now, end);
     const ticketAllocations: Allocation[] = [];

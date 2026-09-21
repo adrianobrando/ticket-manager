@@ -43,10 +43,10 @@ export async function PATCH(request: Request, context: RouteContext) {
         include: { ticket: { include: { client: true } }, contract: true },
       });
       if (existing.ticketId !== ticketId) {
-        await transaction.ticket.update({ where: { id: existing.ticketId }, data: { actualHours: { decrement: existing.durationHours } } });
-        await transaction.ticket.update({ where: { id: ticketId }, data: { actualHours: { increment: durationHours } } });
+        await transaction.ticket.update({ where: { id: existing.ticketId }, data: { oreConsuntivate: { decrement: existing.durationHours } } });
+        await transaction.ticket.update({ where: { id: ticketId }, data: { oreConsuntivate: { increment: durationHours } } });
       } else {
-        await transaction.ticket.update({ where: { id: ticketId }, data: { actualHours: { increment: durationHours - existing.durationHours } } });
+        await transaction.ticket.update({ where: { id: ticketId }, data: { oreConsuntivate: { increment: durationHours - existing.durationHours } } });
       }
       return entry;
     });
@@ -66,7 +66,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     if (!deleted) return jsonError("Registrazione non trovata", 404);
     await prisma.$transaction([
       prisma.timeEntry.delete({ where: { id } }),
-      prisma.ticket.update({ where: { id: deleted.ticketId }, data: { actualHours: { decrement: deleted.durationHours } } }),
+      prisma.ticket.update({ where: { id: deleted.ticketId }, data: { oreConsuntivate: { decrement: deleted.durationHours } } }),
     ]);
     await calculateSchedule();
     return Response.json({ deleted: true, id });

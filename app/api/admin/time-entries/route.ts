@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     });
     await prisma.ticket.update({
       where: { id: ticket.id },
-      data: { actualHours: { increment: durationHours } },
+      data: { oreConsuntivate: { increment: durationHours } },
     });
     await calculateSchedule();
     return Response.json(timeEntry, { status: 201 });

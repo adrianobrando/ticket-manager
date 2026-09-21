@@ -23,7 +23,7 @@ export async function DELETE(request: Request, context: RouteContext) {
       await tx.workLog.delete({ where: { id } });
       await tx.ticket.update({
         where: { id: workLog.ticketId },
-        data: { actualHours: { decrement: workLog.duration } },
+        data: { oreConsuntivate: { decrement: workLog.duration } },
       });
       return workLog;
     });

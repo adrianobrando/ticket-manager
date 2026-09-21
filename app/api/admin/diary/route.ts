@@ -32,7 +32,7 @@ export async function GET(request: Request) {
         overflow: true,
         ticket: {
           select: {
-            id: true, title: true, priority: true, estimatedHours: true, dueDate: true,
+            id: true, title: true, priority: true, oreStimate: true, dueDate: true,
             scheduledTask: { select: { endDate: true } },
           },
         },

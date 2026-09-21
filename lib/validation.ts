@@ -10,7 +10,7 @@ export const createTicketSchema = z.object({
   clientName: nonEmptyString,
   clientEmail: z.email(),
   contractId: nonEmptyString.optional(),
-  estimatedHours: z.number().finite().min(0).nullable().optional(),
+  oreStimate: z.number().finite().min(0).nullable().optional(),
   hourlyRate: z.number().finite().min(0).nullable().optional(),
   fixedPrice: z.number().finite().min(0).nullable().optional(),
   showPrice: z.boolean().optional(),
@@ -33,11 +33,11 @@ export const updateTicketSchema = z
   .object({
     status: z.enum(["new", "open", "in_progress", "completed", "cancelled"]).optional(),
     priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
-    estimatedHours: z.number().finite().min(0).nullable().optional(),
+    oreStimate: z.number().finite().min(0).nullable().optional(),
     hourlyRate: z.number().finite().min(0).nullable().optional(),
     fixedPrice: z.number().finite().min(0).nullable().optional(),
     showPrice: z.boolean().optional(),
-    actualHours: z.number().finite().min(0).optional(),
+    oreConsuntivate: z.number().finite().min(0).optional(),
     contractId: nonEmptyString.nullable().optional(),
     // The admin form uses <input type="date"> (YYYY-MM-DD), while API
     // clients may send a full ISO datetime.

@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     }
 
     const input = createTicketSchema.parse(Object.fromEntries(formData.entries()));
-    const { title, description, type, priority, clientName, clientEmail, estimatedHours, contractId, dueDate } = input;
+    const { title, description, type, priority, clientName, clientEmail, oreStimate, contractId, dueDate } = input;
 
     const client = await prisma.client.upsert({
       where: { email: clientEmail },
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
         // Production databases created before the retainer migration still
         // enforce NOT NULL. Retainer scheduling is contract-based, so zero is
         // a safe compatibility value until that migration is applied.
-        estimatedHours: contract?.type === "RETAINER" ? 0 : (estimatedHours ?? 0),
+        oreStimate: contract?.type === "RETAINER" ? 0 : (oreStimate ?? 0),
         clientId: client.id,
         contractId: contractId ?? null,
         dueDate: dueDate ?? null,

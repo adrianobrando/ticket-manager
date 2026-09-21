@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       });
       await tx.ticket.update({
         where: { id: input.ticketId },
-        data: { actualHours: { increment: duration } },
+        data: { oreConsuntivate: { increment: duration } },
       });
       return created;
     });

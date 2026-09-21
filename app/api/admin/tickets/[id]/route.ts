@@ -21,7 +21,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const input = updateTicketSchema.parse(body.data);
     const data = {
       ...input,
-      ...(input.estimatedHours === null ? { estimatedHours: 0 } : {}),
+      ...(input.oreStimate === null ? { oreStimate: 0 } : {}),
       ...(input.dueDate !== undefined ? { dueDate: input.dueDate ? new Date(input.dueDate) : null } : {}),
       ...(input.contractId !== undefined ? { contractId: input.contractId } : {}),
     };
@@ -40,7 +40,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         data,
         select: {
           id: true, title: true, token: true, status: true, priority: true,
-          estimatedHours: true, dueDate: true, hourlyRate: true, fixedPrice: true, showPrice: true,
+          oreStimate: true, dueDate: true, hourlyRate: true, fixedPrice: true, showPrice: true,
           client: { select: { name: true, email: true } },
         },
       });
@@ -65,7 +65,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       });
     }
 
-    if ("status" in data || "priority" in data || "estimatedHours" in data || "contractId" in data || "dueDate" in data) {
+    if ("status" in data || "priority" in data || "oreStimate" in data || "contractId" in data || "dueDate" in data) {
       const scheduled = await calculateSchedule();
       return NextResponse.json(
         scheduled.find((item) => item.id === ticket.id) ?? ticket,
