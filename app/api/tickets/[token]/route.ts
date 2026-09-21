@@ -22,7 +22,6 @@ export async function GET(_request: Request, context: RouteContext) {
         dueDate: true,
         fixedPrice: true,
         hourlyRate: true,
-        estimatedHours: true,
         // fields for client tracking / progress
         oreStimate: true,
         oreConsuntivate: true,
@@ -38,10 +37,15 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!ticket) {
       return jsonError("Ticket non trovato", 404);
     }
+    // Se il ticket è stato annullato (status === 'cancelled'), il tracking pubblico non deve essere accessibile.
+    // Restituisce 404 in modo che la pagina pubblica mostri la vista "non disponibile".
+    if (ticket.status === "cancelled") {
+      return jsonError("Ticket non disponibile", 404);
+    }
 
     const calculatedPrice = ticket.fixedPrice ?? (
-      ticket.hourlyRate != null && ticket.estimatedHours != null
-        ? ticket.hourlyRate * ticket.estimatedHours
+      ticket.hourlyRate != null && ticket.oreStimate != null
+        ? ticket.hourlyRate * ticket.oreStimate
         : null
     );
     return Response.json({

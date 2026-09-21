@@ -176,9 +176,9 @@ export default function TicketTrackingPage({
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
         <section className="w-full max-w-lg rounded-2xl bg-white p-8 text-center shadow-sm">
-          <h1 className="text-2xl font-bold text-slate-900">Ticket non trovato</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Ticket non disponibile</h1>
           <p className="mt-3 text-slate-600">
-            Il token di tracking non è valido o il ticket non esiste.
+            Il ticket non è più disponibile per il tracking pubblico.
           </p>
         </section>
       </main>
