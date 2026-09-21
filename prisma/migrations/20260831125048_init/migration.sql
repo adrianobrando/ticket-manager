@@ -3,7 +3,7 @@ CREATE TABLE "Client" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- CreateTable
@@ -15,11 +15,11 @@ CREATE TABLE "Ticket" (
     "priority" TEXT NOT NULL DEFAULT 'normal',
     "status" TEXT NOT NULL DEFAULT 'new',
     "clientId" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    "dueDate" DATETIME,
-    "estimatedHours" REAL NOT NULL DEFAULT 0,
-    "actualHours" REAL NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "dueDate" TIMESTAMP(3),
+    "estimatedHours" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "actualHours" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "token" TEXT NOT NULL,
     CONSTRAINT "Ticket_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
@@ -30,7 +30,7 @@ CREATE TABLE "Comment" (
     "ticketId" TEXT NOT NULL,
     "author" TEXT NOT NULL,
     "content" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "Comment_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "Ticket" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -38,8 +38,8 @@ CREATE TABLE "Comment" (
 CREATE TABLE "ScheduledTask" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "ticketId" TEXT NOT NULL,
-    "startDate" DATETIME NOT NULL,
-    "endDate" DATETIME NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3) NOT NULL,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT "ScheduledTask_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "Ticket" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
