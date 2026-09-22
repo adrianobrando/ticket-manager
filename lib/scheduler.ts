@@ -142,6 +142,7 @@ function allocateHours(
   days: Date[],
   dailyLoad: Map<string, number>,
   allocations: Allocation[],
+  dailyCap: number,
 ) {
   let remainingCents = Math.max(0, Math.round(hours * HOURS_PRECISION));
   for (const day of days) {
@@ -151,7 +152,7 @@ function allocateHours(
     const allocatedCents = Math.min(
       remainingCents,
       availableCents,
-      Math.round(MAX_TICKET_HOURS_PER_DAY * HOURS_PRECISION),
+      Math.round(dailyCap * HOURS_PRECISION),
     );
     if (allocatedCents <= 0) continue;
     dailyLoad.set(key, (dailyLoad.get(key) ?? 0) + allocatedCents);
@@ -199,6 +200,17 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   const scheduledTickets: TicketForSchedule[] = [];
 
   // Hourly contracts retain the old finite-estimate behavior.
+  function computeDailyCap(ticket: TicketForSchedule, workDaysLeft: Date[]) {
+    const priorityCap = ticket.priority === "urgent" || ticket.priority === "high" ? 4
+      : ticket.priority === "normal" ? 2
+      : 1.5;
+    const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
+    const perDayLimit = workDaysLeft.length ? remaining / workDaysLeft.length : priorityCap;
+    const capped = Math.min(priorityCap, perDayLimit);
+    const finalCap = Math.max(MIN_TICKET_HOURS_PER_DAY, capped);
+    return roundHours(finalCap);
+  }
+
   const hourlyTickets = tickets.filter((ticket) => ticket.contract?.type !== "RETAINER"
     && (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0) > 0);
   hourlyTickets.sort(compareTickets);
@@ -207,11 +219,12 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
     const end = ticket.dueDate ?? new Date(now.getTime() + Math.max(1, Math.ceil(remaining / WORK_HOURS_PER_DAY)) * 86400000);
     const days = workDaysBetween(now, end);
     const ticketAllocations: Allocation[] = [];
-    let overflowCents = allocateHours(remaining, days, dailyLoad, ticketAllocations);
+    const dailyCap = computeDailyCap(ticket, days);
+    let overflowCents = allocateHours(remaining, days, dailyLoad, ticketAllocations, dailyCap);
     while (overflowCents > 0) {
       const next = days.length ? nextWorkDay(days[days.length - 1]) : toWorkCursor(now);
       days.push(next);
-      overflowCents = allocateHours(overflowCents / HOURS_PRECISION, [next], dailyLoad, ticketAllocations);
+      overflowCents = allocateHours(overflowCents / HOURS_PRECISION, [next], dailyLoad, ticketAllocations, dailyCap);
     }
     allocations.set(ticket.id, ticketAllocations);
     scheduledTickets.push(ticket);
@@ -249,7 +262,7 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
       const due = ticket.dueDate && ticket.dueDate < monthEnd ? ticket.dueDate : monthEnd;
       const days = workDaysBetween(now > monthStart ? now : monthStart, due);
       const ticketAllocations: Allocation[] = [];
-      const unallocatedCents = allocateHours(quotaCents / HOURS_PRECISION, days, dailyLoad, ticketAllocations);
+      const unallocatedCents = allocateHours(quotaCents / HOURS_PRECISION, days, dailyLoad, ticketAllocations, MAX_TICKET_HOURS_PER_DAY);
       if (unallocatedCents > 0) overflowTickets.add(ticket.id);
       allocations.set(ticket.id, ticketAllocations);
       scheduledTickets.push(ticket);
