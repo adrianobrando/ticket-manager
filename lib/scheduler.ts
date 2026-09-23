@@ -4,6 +4,7 @@ export const WORK_HOURS_PER_DAY = Number(process.env.WORK_HOURS_PER_DAY) || 8;
 export const MAX_TICKET_HOURS_PER_DAY = 4;
 export const MIN_TICKET_HOURS_PER_DAY = 0.5;
 export const WORK_START_HOUR = 9;
+export const SCHEDULE_HORIZON_DAYS = Number(process.env.SCHEDULE_HORIZON_DAYS) || 21;
 
 export const PRIORITY_RANK: Record<string, number> = {
   urgent: 0,
@@ -192,6 +193,7 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   }
 
   const { start: monthStart, end: monthEnd } = monthBounds(now);
+  const horizonEnd = new Date(now.getTime() + SCHEDULE_HORIZON_DAYS * 86400000);
   const dailyLoad = new Map<string, number>();
   const allocations = new Map<string, Allocation[]>();
   const overflowTickets = new Set<string>();
@@ -206,28 +208,59 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
       : 1.5;
     const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
     const perDayLimit = workDaysLeft.length ? remaining / workDaysLeft.length : priorityCap;
-    const capped = Math.min(priorityCap, perDayLimit);
-    const finalCap = Math.max(MIN_TICKET_HOURS_PER_DAY, capped);
+
+    let finalCap: number;
+    if (ticket.priority === "urgent") {
+      // Urgent tickets always get the full priority cap to finish ASAP.
+      finalCap = priorityCap;
+    } else if (ticket.priority === "high") {
+      // High tickets get the full cap only if the per-day need is > 2h,
+      // otherwise they receive the per-day need (but not below MIN_TICKET_HOURS_PER_DAY).
+      if ((workDaysLeft.length ? remaining / workDaysLeft.length : priorityCap) > 2) {
+        finalCap = priorityCap;
+      } else {
+        finalCap = perDayLimit;
+      }
+    } else {
+      // normal / low: original behavior
+      finalCap = Math.min(priorityCap, perDayLimit);
+    }
+
+    finalCap = Math.max(MIN_TICKET_HOURS_PER_DAY, finalCap);
     return roundHours(finalCap);
   }
 
   const hourlyTickets = tickets.filter((ticket) => ticket.contract?.type !== "RETAINER"
     && (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0) > 0);
-  hourlyTickets.sort(compareTickets);
-  for (const ticket of hourlyTickets) {
-    const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
-    const end = ticket.dueDate ?? new Date(now.getTime() + Math.max(1, Math.ceil(remaining / WORK_HOURS_PER_DAY)) * 86400000);
-    const days = workDaysBetween(now, end);
-    const ticketAllocations: Allocation[] = [];
-    const dailyCap = computeDailyCap(ticket, days);
-    let overflowCents = allocateHours(remaining, days, dailyLoad, ticketAllocations, dailyCap);
-    while (overflowCents > 0) {
-      const next = days.length ? nextWorkDay(days[days.length - 1]) : toWorkCursor(now);
-      days.push(next);
-      overflowCents = allocateHours(overflowCents / HOURS_PRECISION, [next], dailyLoad, ticketAllocations, dailyCap);
+
+  // Process hourly tickets in priority tiers so higher priority tiers reserve capacity first.
+  const priorityTiers = ["urgent", "high", "normal", "low"] as const;
+  function sortByDueThenCreated(a: TicketForSchedule, b: TicketForSchedule) {
+    if (a.dueDate && b.dueDate) {
+      const d = a.dueDate.getTime() - b.dueDate.getTime();
+      if (d !== 0) return d;
+    } else if (a.dueDate) return -1;
+    else if (b.dueDate) return 1;
+    return a.createdAt.getTime() - b.createdAt.getTime();
+  }
+
+  for (const priority of priorityTiers) {
+    const tierTickets = hourlyTickets.filter((t) => t.priority === priority).sort(sortByDueThenCreated);
+    for (const ticket of tierTickets) {
+      const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
+      const end = ticket.dueDate ?? horizonEnd;
+      const days = workDaysBetween(now, end);
+      const ticketAllocations: Allocation[] = [];
+      const dailyCap = computeDailyCap(ticket, days);
+      let overflowCents = allocateHours(remaining, days, dailyLoad, ticketAllocations, dailyCap);
+      while (overflowCents > 0) {
+        const next = days.length ? nextWorkDay(days[days.length - 1]) : toWorkCursor(now);
+        days.push(next);
+        overflowCents = allocateHours(overflowCents / HOURS_PRECISION, [next], dailyLoad, ticketAllocations, dailyCap);
+      }
+      allocations.set(ticket.id, ticketAllocations);
+      scheduledTickets.push(ticket);
     }
-    allocations.set(ticket.id, ticketAllocations);
-    scheduledTickets.push(ticket);
   }
 
   const retainerTickets = tickets.filter((ticket) =>
@@ -279,26 +312,54 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   }
 
   await prisma.$transaction(async (tx) => {
+    // clear existing work days and scheduled tasks (we'll recreate them from scratch)
     await tx.workDay.deleteMany();
-    await tx.scheduledTask.deleteMany({ where: { ticketId: { notIn: scheduledTickets.map((ticket) => ticket.id) } } });
+    await tx.scheduledTask.deleteMany();
+
+    // prepare scheduledTask records to create in bulk
+    const scheduledTasksData = scheduledTickets.map((ticket) => {
+      const task = scheduled.get(ticket.id);
+      if (!task) return null;
+      return {
+        ticketId: ticket.id,
+        startDate: task.startDate,
+        endDate: task.endDate,
+        sortOrder: task.sortOrder,
+      };
+    }).filter((v): v is { ticketId: string; startDate: Date; endDate: Date; sortOrder: number } => Boolean(v));
+
+    if (scheduledTasksData.length) {
+      await tx.scheduledTask.createMany({ data: scheduledTasksData });
+    }
+
+    // collect all workDay records and create them in a single batch
+    const workDayData: { ticketId: string; date: Date; plannedHours: number; overflow: boolean }[] = [];
+    for (const ticket of scheduledTickets) {
+      for (const allocation of allocations.get(ticket.id) ?? []) {
+        workDayData.push({
+          ticketId: ticket.id,
+          date: allocation.date,
+          plannedHours: allocation.plannedHours,
+          overflow: overflowTickets.has(ticket.id),
+        });
+      }
+    }
+
+    if (workDayData.length) {
+      await tx.workDay.createMany({ data: workDayData });
+    }
+
+    // preserve ticket dueDate updates (performed per-ticket as before)
     for (const ticket of scheduledTickets) {
       const task = scheduled.get(ticket.id);
       if (!task) continue;
-      await tx.scheduledTask.upsert({ where: { ticketId: ticket.id }, create: { ticketId: ticket.id, ...task }, update: task });
-      for (const allocation of allocations.get(ticket.id) ?? []) {
-        await tx.workDay.create({
-          data: {
-            ticketId: ticket.id,
-            date: allocation.date,
-            plannedHours: allocation.plannedHours,
-            overflow: overflowTickets.has(ticket.id),
-          },
-        });
-      }
       if (!ticket.dueDate && ticket.contract?.type !== "RETAINER") {
         await tx.ticket.update({ where: { id: ticket.id }, data: { dueDate: task.endDate } });
       }
     }
+  }, {
+    timeout: 30000,
+    maxWait: 10000,
   });
 
   return scheduledTickets.map((ticket) => {
@@ -307,7 +368,11 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
       ...ticket,
       scheduledTask: task,
       workDays: allocations.get(ticket.id) ?? [],
-      delayed: Boolean(ticket.dueDate && task && task.endDate > ticket.dueDate),
+      delayed: Boolean(
+        ticket.dueDate &&
+        task &&
+        startOfDay(task.endDate).getTime() > startOfDay(ticket.dueDate).getTime()
+      ),
     };
   });
 }

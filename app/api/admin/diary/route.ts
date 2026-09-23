@@ -46,12 +46,22 @@ export async function GET(request: Request) {
       return (priorityOrder[a.ticket.priority] ?? 99) - (priorityOrder[b.ticket.priority] ?? 99);
     });
 
+    function startOfDay(date: Date) {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
     return Response.json({
       start,
       end,
       days: days.map((day) => ({
         ...day,
-        delayed: Boolean(day.ticket.dueDate && day.ticket.scheduledTask && day.ticket.scheduledTask.endDate > day.ticket.dueDate),
+        delayed: Boolean(
+          day.ticket.dueDate &&
+          day.ticket.scheduledTask &&
+          startOfDay(day.ticket.scheduledTask.endDate).getTime() > startOfDay(day.ticket.dueDate).getTime()
+        ),
       })),
     });
   } catch (error) {
