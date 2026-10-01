@@ -47,6 +47,8 @@ model Ticket {
   oreStimate      Float?
   oreConsuntivate Float           @default(0)
   stato           TicketStato     @default(todo)
+  paused          Boolean         @default(false)
+  pausedAt        DateTime?
   token           String          @unique @default(cuid())
   comments        Comment[]
   scheduledTask   ScheduledTask?
