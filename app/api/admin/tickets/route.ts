@@ -11,13 +11,19 @@ export async function GET(request: Request) {
     const authError = requireAdminPassword(request);
     if (authError) return authError;
     const { searchParams } = new URL(request.url);
-    const { status, priority, page, pageSize } = ticketFiltersSchema.parse({
+    const { status, priority, includePaused, onlyPaused, page, pageSize } = ticketFiltersSchema.parse({
       status: searchParams.get("status") || undefined,
       priority: searchParams.get("priority") || undefined,
+      includePaused: searchParams.get("includePaused") || undefined,
+      onlyPaused: searchParams.get("onlyPaused") || undefined,
       page: searchParams.get("page") || undefined,
       pageSize: searchParams.get("pageSize") || undefined,
     });
-    const where = { ...(status ? { status } : {}), ...(priority ? { priority } : {}) };
+    const where = {
+      ...(status ? { status } : {}),
+      ...(priority ? { priority } : {}),
+      ...(onlyPaused ? { paused: true } : includePaused ? {} : { paused: false }),
+    };
 
     const [tickets, total] = await prisma.$transaction([
       prisma.ticket.findMany({
@@ -25,13 +31,13 @@ export async function GET(request: Request) {
       select: {
        id: true, title: true, token: true, type: true, priority: true, status: true, contractId: true,
        createdAt: true, dueDate: true, oreStimate: true, hourlyRate: true, fixedPrice: true, showPrice: true,
+       paused: true, pausedAt: true,
        client: { select: { id: true, name: true, email: true } },
        contract: { select: { id: true, name: true, type: true, monthlyHoursIncluded: true } },
        scheduledTask: { select: { startDate: true, endDate: true, sortOrder: true } },
       },
       orderBy: { createdAt: "asc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+      ...(onlyPaused ? {} : { skip: (page - 1) * pageSize, take: pageSize }),
       }),
       prisma.ticket.count({ where }),
     ]);
@@ -47,6 +53,7 @@ export async function GET(request: Request) {
       ...ticket,
       createdAt: ticket.createdAt.toISOString(),
       dueDate: ticket.dueDate?.toISOString() ?? null,
+      pausedAt: ticket.pausedAt?.toISOString() ?? null,
       scheduledTask: ticket.scheduledTask
         ? {
             ...ticket.scheduledTask,

@@ -48,6 +48,16 @@ export const updateTicketSchema = z
 export const ticketFiltersSchema = z.object({
   status: z.enum(["new", "open", "in_progress", "completed", "cancelled"]).optional(),
   priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+  includePaused: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((val) => val === "true"),
+  onlyPaused: z
+    .enum(["true", "false"])
+    .optional()
+    .default("false")
+    .transform((val) => val === "true"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

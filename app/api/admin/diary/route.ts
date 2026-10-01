@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     if (start > end) return jsonError("L'intervallo delle date non è valido", 400);
 
     const days = await prisma.workDay.findMany({
-      where: { date: { gte: start, lte: end } },
+      where: { date: { gte: start, lte: end }, ticket: { paused: false } },
       orderBy: { date: "asc" },
       select: {
         date: true,

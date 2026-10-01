@@ -20,6 +20,8 @@ type Ticket = {
   showPrice: boolean;
   client: { id: string; name: string; email: string };
   contractId: string | null;
+  paused: boolean;
+  pausedAt: string | null;
   scheduledTask: { startDate: string; endDate: string; sortOrder: number } | null;
 };
 type DiaryEntry = {
@@ -98,17 +100,21 @@ export default function AdminPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
+  const [showPaused, setShowPaused] = useState(false);
   const [editing, setEditing] = useState<Ticket | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isTogglingPause, setIsTogglingPause] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [deleting, setDeleting] = useState<Ticket | null>(null);
   const [diary, setDiary] = useState<DiaryEntry[]>([]);
+  const [pausedTickets, setPausedTickets] = useState<Ticket[]>([]);
+  const [resumingId, setResumingId] = useState<string | null>(null);
   const [diaryStart, setDiaryStart] = useState(() => {
     const date = new Date();
     date.setHours(0, 0, 0, 0);
@@ -130,19 +136,20 @@ export default function AdminPage() {
     return data;
   }
 
-  async function loadTickets(nextStatus = statusFilter, nextPriority = priorityFilter, nextPage = page) {
+  async function loadTickets(nextStatus = statusFilter, nextPriority = priorityFilter, nextPage = page, nextIncludePaused = showPaused) {
     setLoading(true);
     setError("");
     try {
       const query = new URLSearchParams();
       if (nextStatus) query.set("status", nextStatus);
       if (nextPriority) query.set("priority", nextPriority);
+      if (nextIncludePaused) query.set("includePaused", "true");
       query.set("page", String(nextPage));
       const result = await request(`/api/admin/tickets?${query}`);
       setTickets(result.tickets);
       setPage(result.page);
       setTotalPages(result.totalPages);
-      await Promise.all([loadDiary(diaryStart), loadContracts()]);
+      await Promise.all([loadDiary(diaryStart), loadContracts(), loadPausedTickets()]);
     } catch (loadError) {
       if (loadError instanceof Error && loadError.message === "AUTH_REQUIRED") {
         router.replace("/admin/login");
@@ -165,6 +172,27 @@ export default function AdminPage() {
   async function loadContracts() {
     const result = await request("/api/admin/contracts");
     setContracts(result.contracts.filter((contract: Contract) => contract.isActive !== false));
+  }
+
+  async function loadPausedTickets() {
+    const result = await request("/api/admin/tickets?onlyPaused=true");
+    setPausedTickets(result.tickets);
+  }
+
+  async function resumeTicket(ticketId: string) {
+    if (resumingId) return;
+    setResumingId(ticketId);
+    setError("");
+    try {
+      await request(`/api/admin/tickets/${ticketId}/resume`, { method: "POST" });
+      setPausedTickets((current) => current.filter((ticket) => ticket.id !== ticketId));
+      await loadTickets();
+      setMessage("Ticket ripreso.");
+    } catch (resumeError) {
+      setError(resumeError instanceof Error ? resumeError.message : "Operazione non riuscita.");
+    } finally {
+      setResumingId(null);
+    }
   }
 
   async function loadDiary(start: Date) {
@@ -267,6 +295,25 @@ export default function AdminPage() {
     }
   }
 
+  async function togglePause() {
+    if (!editing) return;
+    if (isTogglingPause) return;
+    setIsTogglingPause(true);
+    setError("");
+    const wasPaused = editing.paused;
+    try {
+      const action = wasPaused ? "resume" : "pause";
+      const updated = await request(`/api/admin/tickets/${editing.id}/${action}`, { method: "POST" });
+      setEditing((current) => (current ? { ...current, paused: updated.paused, pausedAt: updated.pausedAt } : current));
+      await loadTickets();
+      setMessage(wasPaused ? "Ticket ripreso." : "Ticket messo in pausa.");
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : "Operazione non riuscita.");
+    } finally {
+      setIsTogglingPause(false);
+    }
+  }
+
   const days = useMemo(() => weekDays(), []);
 
   return (
@@ -284,12 +331,20 @@ export default function AdminPage() {
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-red-700">{error}</p>}
 
         <section className="flex flex-wrap gap-3 rounded-2xl bg-white p-4 shadow-sm">
-          <select className="rounded-lg border border-slate-300 px-3 py-2" onChange={(event) => {           const value = event.target.value; setStatusFilter(value); setPage(1); void loadTickets(value, priorityFilter, 1); }} value={statusFilter}>
+          <select className="rounded-lg border border-slate-300 px-3 py-2" onChange={(event) => {           const value = event.target.value; setStatusFilter(value); setPage(1); void loadTickets(value, priorityFilter, 1, showPaused); }} value={statusFilter}>
             <option value="">Tutti gli stati</option>{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
           </select>
-          <select className="rounded-lg border border-slate-300 px-3 py-2" onChange={(event) => {           const value = event.target.value; setPriorityFilter(value); setPage(1); void loadTickets(statusFilter, value, 1); }} value={priorityFilter}>
+          <select className="rounded-lg border border-slate-300 px-3 py-2" onChange={(event) => {           const value = event.target.value; setPriorityFilter(value); setPage(1); void loadTickets(statusFilter, value, 1, showPaused); }} value={priorityFilter}>
             <option value="">Tutte le priorità</option>{priorities.map((priority) => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}
           </select>
+          <label className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium">
+            <input
+              checked={showPaused}
+              onChange={(event) => { const value = event.target.checked; setShowPaused(value); setPage(1); void loadTickets(statusFilter, priorityFilter, 1, value); }}
+              type="checkbox"
+            />
+            Mostra anche in pausa
+          </label>
         </section>
 
         <nav className="flex gap-2 border-b border-slate-200" aria-label="Sezioni dashboard">
@@ -301,15 +356,15 @@ export default function AdminPage() {
         {activeTab === "tickets" && <><section className="overflow-x-auto rounded-2xl bg-white shadow-sm">
           {loading ? <p className="p-6 text-slate-500">Caricamento...</p> : (
             <table className="w-full min-w-[1050px] text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50"><tr>{["Titolo", "Cliente", "Tipo", "Priorità", "Stato", "Tracking", "Data stimata", "Azioni"].map((heading) => <th className="px-4 py-3 font-semibold" key={heading}>{heading}</th>)}</tr></thead>
-              <tbody>{tickets.map((ticket) => { const styles = getPriorityStyles(ticket.priority); return <tr className={`border-b border-l-4 border-slate-100 last:border-0 ${styles.border} ${styles.background}`} key={ticket.id}><td className="px-4 py-4 font-medium">{ticket.title}</td><td className="px-4 py-4">{ticket.client.name}<br /><span className="text-xs text-slate-600">{ticket.client.email}</span></td><td className="px-4 py-4">{ticket.type}</td><td className="px-4 py-4"><PriorityBadge priority={ticket.priority} /></td><td className="px-4 py-4">{statusLabels[ticket.status] || ticket.status}</td><td className="px-4 py-4"><code className="select-all rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{ticket.token}</code><br /><a className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline" href={`/t/${encodeURIComponent(ticket.token)}`} target="_blank" rel="noreferrer">Apri tracking</a></td><td className="px-4 py-4">{formatDate(ticket.dueDate)}</td><td className="flex gap-3 px-4 py-4"><button className="font-medium text-blue-700 hover:underline" onClick={() => setEditing(ticket)}>Modifica</button><button aria-label={`Elimina ${ticket.title}`} className="text-red-700 hover:text-red-900" onClick={() => setDeleting(ticket)} title="Elimina" type="button">🗑</button></td></tr>; })}</tbody>
+              <tbody>{tickets.map((ticket) => { const styles = getPriorityStyles(ticket.priority); return <tr className={`border-b border-l-4 border-slate-100 last:border-0 ${styles.border} ${styles.background}`} key={ticket.id}><td className="px-4 py-4 font-medium"><span className="flex items-center gap-2">{ticket.title}{ticket.paused && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">IN PAUSA</span>}</span></td><td className="px-4 py-4">{ticket.client.name}<br /><span className="text-xs text-slate-600">{ticket.client.email}</span></td><td className="px-4 py-4">{ticket.type}</td><td className="px-4 py-4"><PriorityBadge priority={ticket.priority} /></td><td className="px-4 py-4">{statusLabels[ticket.status] || ticket.status}</td><td className="px-4 py-4"><code className="select-all rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{ticket.token}</code><br /><a className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline" href={`/t/${encodeURIComponent(ticket.token)}`} target="_blank" rel="noreferrer">Apri tracking</a></td><td className="px-4 py-4">{formatDate(ticket.dueDate)}</td><td className="flex gap-3 px-4 py-4"><button className="font-medium text-blue-700 hover:underline" onClick={() => setEditing(ticket)}>Modifica</button><button aria-label={`Elimina ${ticket.title}`} className="text-red-700 hover:text-red-900" onClick={() => setDeleting(ticket)} title="Elimina" type="button">🗑</button></td></tr>; })}</tbody>
             </table>
           )}
         </section>
         {totalPages > 1 && (
           <nav className="flex items-center justify-between rounded-2xl bg-white p-4 text-sm shadow-sm" aria-label="Paginazione ticket">
-            <button className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40" disabled={page === 1} onClick={() => void loadTickets(statusFilter, priorityFilter, page - 1)} type="button">Precedente</button>
+            <button className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40" disabled={page === 1} onClick={() => void loadTickets(statusFilter, priorityFilter, page - 1, showPaused)} type="button">Precedente</button>
             <span>Pagina {page} di {totalPages}</span>
-            <button className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40" disabled={page === totalPages} onClick={() => void loadTickets(statusFilter, priorityFilter, page + 1)} type="button">Successiva</button>
+            <button className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40" disabled={page === totalPages} onClick={() => void loadTickets(statusFilter, priorityFilter, page + 1, showPaused)} type="button">Successiva</button>
           </nav>
         )}
 
@@ -317,11 +372,33 @@ export default function AdminPage() {
           <h2 className="text-xl font-semibold">Calendario della settimana</h2>
           <div className="mt-4 grid gap-3 md:grid-cols-5">
             {days.map((day) => {
-              const dayTickets = tickets.filter((ticket) => ticket.scheduledTask && new Date(ticket.scheduledTask.startDate).toDateString() === day.toDateString());
+              const dayTickets = tickets.filter((ticket) => !ticket.paused && ticket.scheduledTask && new Date(ticket.scheduledTask.startDate).toDateString() === day.toDateString());
               return <div className="min-h-32 rounded-xl border border-slate-200 bg-slate-50 p-3" key={day.toISOString()}><h3 className="font-semibold">{new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "short" }).format(day)}</h3>{dayTickets.length === 0 ? <p className="mt-3 text-xs text-slate-500">Nessun ticket</p> : dayTickets.map((ticket) => { const styles = getPriorityStyles(ticket.priority); return <p className={`mt-3 rounded border-l-4 p-2 text-xs font-medium text-slate-900 ${styles.border} ${styles.background}`} key={ticket.id}>{ticket.title}</p>; })}</div>;
             })}
           </div>
         </section>
+        {pausedTickets.length > 0 && (
+          <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold">In pausa ({pausedTickets.length})</h2>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {pausedTickets.map((ticket) => (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3" key={ticket.id}>
+                  <p className="font-semibold">{ticket.title}</p>
+                  <p className="text-xs text-slate-600">{ticket.client.name}</p>
+                  <p className="mt-2 text-xs text-slate-600">In pausa dal {formatDate(ticket.pausedAt)}</p>
+                  <button
+                    className="mt-3 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={resumingId === ticket.id}
+                    onClick={() => void resumeTicket(ticket.id)}
+                    type="button"
+                  >
+                    {resumingId === ticket.id ? "Ripresa..." : "Riprendi"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
         </>}
 
         {activeTab === "diary" && <section className="rounded-2xl bg-white p-6 shadow-sm">
@@ -364,7 +441,7 @@ export default function AdminPage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2">{contracts.map((contract) => { const included = contract.monthlyHoursIncluded ?? 0; const percentage = included ? Math.min(100, (contract.registeredHours / included) * 100) : 0; return <article className="rounded-xl border border-slate-200 p-4" key={contract.id}><div className="flex justify-between gap-3"><div><h3 className="font-semibold">{contract.client.name}</h3><p className="text-sm text-slate-500">{contract.name} · {contract.type === "RETAINER" ? "Retainer" : "Hourly"}</p></div><span className="text-sm font-semibold">{contract.hourlyRate.toFixed(2)} €/h</span></div>{contract.type === "RETAINER" ? <><div className="mt-4 flex justify-between text-sm"><span>{formatHours(included)}h incluse</span><span>{formatHours(contract.registeredHours)}h registrate</span><span>{formatHours(contract.remainingHours)}h rimanenti</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className={`h-full ${contract.remainingHours < 0 ? "bg-red-500" : "bg-blue-600"}`} style={{ width: `${percentage}%` }} /></div></> : <p className="mt-4 text-sm">{formatHours(contract.registeredHours)}h registrate</p>}{contract.tickets.length > 0 && <p className="mt-3 text-xs text-slate-500">Ticket: {contract.tickets.slice(0, 3).map((ticket) => ticket.title).join(", ")}</p>}<Link className="mt-4 inline-block text-sm font-semibold text-blue-700" href={`/admin/reports?contractId=${contract.id}`}>Report</Link></article>; })}</div>
           {contracts.length === 0 && <p className="mt-4 text-sm text-slate-500">Nessun contratto attivo.</p>}
         </section>}
-        {editing && <div className="fixed inset-0 flex items-center justify-center bg-slate-900/40 px-4"><form className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-xl" onSubmit={saveTicket}><div className="flex justify-between"><h2 className="text-xl font-semibold">Modifica ticket</h2><button onClick={() => setEditing(null)} type="button">✕</button></div><p className="font-medium">{editing.title}</p><label className="block text-sm font-medium">Priorità<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.priority} name="priority">{priorities.map((priority) => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}</select></label><label className="block text-sm font-medium">Stato<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.status} name="status">{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label><label className="block text-sm font-medium">Ore previste<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.oreStimate ?? ""} min="0" name="oreStimate" step="0.5" type="number" /></label><label className="block text-sm font-medium">Tariffa oraria (€)<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.hourlyRate ?? ""} min="0" name="hourlyRate" step="1" type="number" /></label><label className="block text-sm font-medium">Prezzo preventivo fisso (€)<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.fixedPrice ?? ""} min="0" name="fixedPrice" step="0.01" type="number" /></label><label className="flex items-center gap-2 text-sm font-medium"><input defaultChecked={editing.showPrice} name="showPrice" type="checkbox" />Mostra prezzo nel tracking</label><label className="block text-sm font-medium">Contratto<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.contractId ?? (contracts.filter((contract) => contract.client.id === editing.client.id).length === 1 ? contracts.find((contract) => contract.client.id === editing.client.id)?.id : "")} name="contractId"><option value="">Nessun contratto</option>{contracts.filter((contract) => contract.client.id === editing.client.id).map((contract) => <option key={contract.id} value={contract.id}>{contract.name} ({contract.type})</option>)}</select></label><label className="block text-sm font-medium">Data di scadenza<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.dueDate ? editing.dueDate.slice(0, 10) : ""} name="dueDate" type="date" /></label><div className="flex justify-end gap-3"><button className="rounded-lg border border-slate-300 px-4 py-2" disabled={isSaving} onClick={() => setEditing(null)} type="button">Annulla</button><button className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? "Salvataggio..." : "Salva"}</button></div></form></div>}
+        {editing && <div className="fixed inset-0 flex items-center justify-center bg-slate-900/40 px-4"><form className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-xl" onSubmit={saveTicket}><div className="flex justify-between"><h2 className="text-xl font-semibold">Modifica ticket</h2><button onClick={() => setEditing(null)} type="button">✕</button></div><div className="flex items-center gap-2"><p className="font-medium">{editing.title}</p>{editing.paused && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">IN PAUSA</span>}</div><label className="block text-sm font-medium">Priorità<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.priority} name="priority">{priorities.map((priority) => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}</select></label><label className="block text-sm font-medium">Stato<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.status} name="status">{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label><label className="block text-sm font-medium">Ore previste<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.oreStimate ?? ""} min="0" name="oreStimate" step="0.5" type="number" /></label><label className="block text-sm font-medium">Tariffa oraria (€)<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.hourlyRate ?? ""} min="0" name="hourlyRate" step="1" type="number" /></label><label className="block text-sm font-medium">Prezzo preventivo fisso (€)<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.fixedPrice ?? ""} min="0" name="fixedPrice" step="0.01" type="number" /></label><label className="flex items-center gap-2 text-sm font-medium"><input defaultChecked={editing.showPrice} name="showPrice" type="checkbox" />Mostra prezzo nel tracking</label><label className="block text-sm font-medium">Contratto<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.contractId ?? (contracts.filter((contract) => contract.client.id === editing.client.id).length === 1 ? contracts.find((contract) => contract.client.id === editing.client.id)?.id : "")} name="contractId"><option value="">Nessun contratto</option>{contracts.filter((contract) => contract.client.id === editing.client.id).map((contract) => <option key={contract.id} value={contract.id}>{contract.name} ({contract.type})</option>)}</select></label><label className="block text-sm font-medium">Data di scadenza<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.dueDate ? editing.dueDate.slice(0, 10) : ""} name="dueDate" type="date" /></label><div className="flex items-center justify-between gap-3"><button className={`rounded-lg px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 ${editing.paused ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}`} disabled={isTogglingPause} onClick={() => void togglePause()} type="button">{isTogglingPause ? "Attendere..." : editing.paused ? "Riprendi" : "Metti in pausa"}</button><div className="flex gap-3"><button className="rounded-lg border border-slate-300 px-4 py-2" disabled={isSaving} onClick={() => setEditing(null)} type="button">Annulla</button><button className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? "Salvataggio..." : "Salva"}</button></div></div></form></div>}
         {deleting && <div aria-labelledby="delete-title" aria-modal="true" className="fixed inset-0 z-10 flex items-center justify-center bg-slate-900/40 px-4" role="dialog"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"><h2 className="text-xl font-semibold" id="delete-title">Eliminare il ticket?</h2><p className="mt-3 text-slate-600">Stai per eliminare definitivamente <strong>{deleting.title}</strong> e i dati associati.</p><div className="mt-6 flex justify-end gap-3"><button className="rounded-lg border border-slate-300 px-4 py-2" disabled={isDeleting} onClick={() => setDeleting(null)} type="button">Annulla</button><button className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isDeleting} onClick={() => void deleteTicket()} type="button">{isDeleting ? "Eliminazione..." : "Elimina"}</button></div></div></div>}
       </div>
     </main>
