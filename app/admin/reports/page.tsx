@@ -18,6 +18,7 @@ type Report = {
   ticket: { title: string; client: { name: string } } | null;
   tickets: { id: string; title: string }[];
   timeEntries: ReportEntry[];
+  workLogs: (Omit<ReportEntry, "durationHours" | "note"> & { duration: number; notes: string | null })[];
   totalHours: number;
 };
 
@@ -78,13 +79,31 @@ function ReportsContent() {
 
   const title = report?.contract?.name ?? report?.ticket?.title ?? "Report ore lavorate";
   const clientName = report?.contract?.client.name ?? report?.ticket?.client.name;
+  const activities = report
+    ? [
+        ...report.timeEntries.map((entry) => ({ ...entry, source: "TimeEntry" as const })),
+        ...report.workLogs.map((entry) => ({
+          ...entry,
+          durationHours: entry.duration,
+          note: entry.notes,
+          source: "WorkLog" as const,
+        })),
+      ].sort(
+        (a, b) =>
+          new Date(a.date).getTime() - new Date(b.date).getTime() ||
+          new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+      )
+    : [];
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900 print:bg-white print:px-0 print:py-0">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4 print:block">
           <div><p className="text-sm font-semibold uppercase tracking-widest text-blue-600 print:text-black">Report ore lavorate</p><h1 className="mt-1 text-3xl font-bold">{title}</h1>{clientName && <p className="mt-1 text-slate-600">Cliente: {clientName}</p>}</div>
-          <button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white print:hidden" onClick={() => window.print()} type="button">Stampa report</button>
+          <div className="text-right print:hidden">
+            <button className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white" onClick={() => window.print()} type="button">Anteprima PDF</button>
+            <p className="mt-2 max-w-xs text-xs text-slate-500">Nell’anteprima del browser puoi stampare il report o scegliere &quot;Salva come PDF&quot;.</p>
+          </div>
         </header>
         <section className="rounded-2xl bg-white p-5 shadow-sm print:hidden">
           <div className="flex flex-wrap items-end gap-4">
@@ -97,8 +116,8 @@ function ReportsContent() {
         </section>
         <section className="rounded-2xl bg-white p-6 shadow-sm print:rounded-none print:p-0 print:shadow-none">
           <div className="flex justify-between gap-4 border-b border-slate-200 pb-4"><div><h2 className="text-xl font-semibold">Attività registrate</h2><p className="text-sm text-slate-500">Periodo: {formatDate(`${from}T12:00:00`)} – {formatDate(`${to}T12:00:00`)}</p></div><strong className="text-lg">{report?.totalHours.toFixed(2) ?? "0.00"} h totali</strong></div>
-          <div className="overflow-x-auto"><table className="mt-4 w-full text-left text-sm"><thead><tr className="border-b border-slate-200"><th className="py-3 pr-3">Data</th><th className="py-3 pr-3">Ticket</th><th className="py-3 pr-3">Descrizione</th><th className="py-3 pr-3">Inizio</th><th className="py-3 pr-3">Fine</th><th className="py-3 text-right">Durata</th></tr></thead><tbody>{report?.timeEntries.map((entry) => <tr className="border-b border-slate-100 align-top" key={entry.id}><td className="py-3 pr-3 whitespace-nowrap">{formatDate(entry.date)}</td><td className="py-3 pr-3">{entry.ticket.title}</td><td className="py-3 pr-3">{entry.note || entry.ticket.description}</td><td className="py-3 pr-3 whitespace-nowrap">{formatTime(entry.startTime)}</td><td className="py-3 pr-3 whitespace-nowrap">{formatTime(entry.endTime)}</td><td className="py-3 text-right whitespace-nowrap">{entry.durationHours.toFixed(2)} h</td></tr>)}</tbody></table></div>
-          {report && report.timeEntries.length === 0 && <p className="py-6 text-sm text-slate-500">Nessuna attività registrata nel periodo.</p>}
+          <div className="overflow-x-auto"><table className="mt-4 w-full text-left text-sm"><thead><tr className="border-b border-slate-200"><th className="py-3 pr-3">Data</th><th className="py-3 pr-3">Tipo</th><th className="py-3 pr-3">Ticket</th><th className="py-3 pr-3">Descrizione</th><th className="py-3 pr-3">Inizio</th><th className="py-3 pr-3">Fine</th><th className="py-3 text-right">Durata</th></tr></thead><tbody>{activities.map((entry) => <tr className="border-b border-slate-100 align-top" key={`${entry.source}-${entry.id}`}><td className="py-3 pr-3 whitespace-nowrap">{formatDate(entry.date)}</td><td className="py-3 pr-3">{entry.source}</td><td className="py-3 pr-3">{entry.ticket.title}</td><td className="py-3 pr-3">{entry.note || entry.ticket.description}</td><td className="py-3 pr-3 whitespace-nowrap">{formatTime(entry.startTime)}</td><td className="py-3 pr-3 whitespace-nowrap">{formatTime(entry.endTime)}</td><td className="py-3 text-right whitespace-nowrap">{entry.durationHours.toFixed(2)} h</td></tr>)}</tbody></table></div>
+          {report && activities.length === 0 && <p className="py-6 text-sm text-slate-500">Nessuna attività registrata nel periodo.</p>}
         </section>
       </div>
     </main>

@@ -23,15 +23,15 @@ export async function GET(request: Request) {
     const ticketId = params.get("ticketId");
     const fromValue = params.get("from");
     const toValue = params.get("to");
-    if ((!contractId && !ticketId) || !fromValue || !toValue) {
-      return jsonError("Specificare contractId o ticketId, from e to", 400);
+    if (!fromValue || !toValue) {
+      return jsonError("Specificare from e to", 400);
     }
 
     const from = parseDate(fromValue, "from");
     const to = new Date(parseDate(toValue, "to").getTime() + 86_400_000);
     if (to <= from) return jsonError("L'intervallo del report non è valido", 400);
 
-    const [contract, ticket] = await Promise.all([
+    const [contract, ticket, allTickets] = await Promise.all([
       contractId
         ? prisma.clientContract.findUnique({
             where: { id: contractId },
@@ -49,34 +49,59 @@ export async function GET(request: Request) {
             select: { id: true, title: true, description: true, client: { select: { name: true } } },
           })
         : null,
+      !contractId && !ticketId
+        ? prisma.ticket.findMany({
+            select: { id: true, title: true },
+            orderBy: { title: "asc" },
+          })
+        : null,
     ]);
     if (contractId && !contract) return jsonError("Contratto non trovato", 404);
     if (ticketId && !ticket) return jsonError("Ticket non trovato", 404);
 
-    const timeEntries = await prisma.timeEntry.findMany({
-      where: {
-        date: { gte: from, lt: to },
-        ...(ticketId ? { ticketId } : {}),
-        ...(contractId
-          ? {
-              OR: [
-                { contractId },
-                { contractId: null, ticket: { contractId } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ date: "asc" }, { startTime: "asc" }],
-      select: {
-        id: true,
-        date: true,
-        startTime: true,
-        endTime: true,
-        durationHours: true,
-        note: true,
-        ticket: { select: { id: true, title: true, description: true } },
-      },
-    });
+    const [timeEntries, workLogs] = await Promise.all([
+      prisma.timeEntry.findMany({
+        where: {
+          date: { gte: from, lt: to },
+          ...(ticketId ? { ticketId } : {}),
+          ...(contractId
+            ? {
+                OR: [
+                  { contractId },
+                  { contractId: null, ticket: { contractId } },
+                ],
+              }
+            : {}),
+        },
+        orderBy: [{ date: "asc" }, { startTime: "asc" }],
+        select: {
+          id: true,
+          date: true,
+          startTime: true,
+          endTime: true,
+          durationHours: true,
+          note: true,
+          ticket: { select: { id: true, title: true, description: true } },
+        },
+      }),
+      prisma.workLog.findMany({
+        where: {
+          date: { gte: from, lt: to },
+          ...(ticketId ? { ticketId } : {}),
+          ...(contractId ? { ticket: { contractId } } : {}),
+        },
+        orderBy: [{ date: "asc" }, { startTime: "asc" }],
+        select: {
+          id: true,
+          date: true,
+          startTime: true,
+          endTime: true,
+          duration: true,
+          notes: true,
+          ticket: { select: { id: true, title: true, description: true } },
+        },
+      }),
+    ]);
 
     return Response.json({
       contract,
@@ -84,8 +109,11 @@ export async function GET(request: Request) {
       from: fromValue,
       to: toValue,
       timeEntries,
-      tickets: contract?.tickets ?? (ticket ? [{ id: ticket.id, title: ticket.title }] : []),
-      totalHours: timeEntries.reduce((total, entry) => total + entry.durationHours, 0),
+      workLogs,
+      tickets: contract?.tickets ?? (ticket ? [{ id: ticket.id, title: ticket.title }] : allTickets ?? []),
+      totalHours:
+        timeEntries.reduce((total, entry) => total + entry.durationHours, 0) +
+        workLogs.reduce((total, entry) => total + entry.duration, 0),
     });
   } catch (error) {
     return handleRouteError(error);
