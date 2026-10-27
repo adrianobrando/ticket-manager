@@ -167,7 +167,7 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   // Keep the reads on the shared pool's connection lifecycle predictable in
   // serverless runtimes; the planner is run frequently after ticket changes.
   const ticketsFromDatabase = await prisma.ticket.findMany({
-    where: { status: { notIn: EXCLUDED_STATUSES }, paused: false },
+    where: { status: { notIn: EXCLUDED_STATUSES }, paused: false, oreStimate: { gt: 0 } },
     select: {
       id: true, token: true, title: true, priority: true, status: true, createdAt: true,
       dueDate: true, oreStimate: true,
