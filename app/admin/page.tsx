@@ -126,6 +126,7 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [, setPendingSaveData] = useState<FormData | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isTogglingPause, setIsTogglingPause] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -353,8 +354,37 @@ export default function AdminPage() {
         setFormErrors({ dueDate: "Inserisci la data di consegna" });
         return;
       }
+
+      setIsSaving(true);
+      try {
+        const check: { canFit: boolean; oreMancanti?: number; giorniDiRitardo?: number } = await request(
+          `/api/admin/tickets/${editing.id}/check-capacity`,
+          { method: "POST", body: JSON.stringify({ dueDate: data.get("dueDate"), oreStimate }) },
+        );
+        if (!check.canFit) {
+          setPendingSaveData(data);
+          const confirmed = window.confirm(
+            `Attenzione: la scadenza non è realistica. Ti servono ${check.oreMancanti} ore in più ` +
+              `(giorni di ritardo stimati: ${check.giorniDiRitardo}). Vuoi salvare comunque?`,
+          );
+          if (!confirmed) {
+            setPendingSaveData(null);
+            setIsSaving(false);
+            return;
+          }
+        }
+      } catch {
+        // il check è solo informativo: se fallisce, il salvataggio prosegue
+      }
+      setPendingSaveData(null);
+      setIsSaving(false);
     }
 
+    await performSave(data);
+  }
+
+  async function performSave(data: FormData) {
+    if (!editing) return;
     setFormErrors({});
     setIsSaving(true);
     setError("");
