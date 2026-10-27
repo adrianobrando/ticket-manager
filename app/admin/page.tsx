@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getPriorityStyles, PriorityBadge } from "@/app/components/ui";
@@ -101,19 +101,6 @@ function formatDuration(value: number) {
   return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
 }
 
-function weekDays() {
-  const today = new Date();
-  const monday = new Date(today);
-  const day = monday.getDay();
-  monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
-  monday.setHours(0, 0, 0, 0);
-  return Array.from({ length: 5 }, (_, index) => {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + index);
-    return date;
-  });
-}
-
 function dateKey(date: Date) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
@@ -128,6 +115,7 @@ function diaryDates(start: Date) {
 
 export default function AdminPage() {
   const router = useRouter();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
@@ -156,6 +144,8 @@ export default function AdminPage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [todayData, setTodayData] = useState<TodayData | null>(null);
   const [isLoadingToday, setIsLoadingToday] = useState(false);
+  const [heatmapData, setHeatmapData] = useState<{date: string, plannedHours: number, ticketCount: number}[] | null>(null);
+  const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
 
   async function request(path: string, init?: RequestInit) {
     const headers = new Headers(init?.headers);
@@ -199,6 +189,7 @@ export default function AdminPage() {
   useEffect(() => {
     const timer = window.setTimeout(() => void loadTickets(), 0);
     void loadTodayData();
+    void loadHeatmapData();
     return () => window.clearTimeout(timer);
     // Initial data load should run once when the dashboard mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -228,6 +219,23 @@ export default function AdminPage() {
       }
     } finally {
       setIsLoadingToday(false);
+    }
+  }
+
+  async function loadHeatmapData() {
+    setIsLoadingHeatmap(true);
+    setError("");
+    try {
+      const result = await request("/api/admin/heatmap");
+      setHeatmapData(result);
+    } catch (heatmapError) {
+      if (heatmapError instanceof Error && heatmapError.message === "AUTH_REQUIRED") {
+        router.replace("/admin/login");
+      } else {
+        setError(heatmapError instanceof Error ? heatmapError.message : "Impossibile caricare la heatmap.");
+      }
+    } finally {
+      setIsLoadingHeatmap(false);
     }
   }
 
@@ -315,7 +323,7 @@ export default function AdminPage() {
     try {
       await request("/api/admin/schedule/run", { method: "POST" });
       await loadTickets();
-      await loadTodayData();
+      await Promise.all([loadTodayData(), loadHeatmapData()]);
       setMessage("Schedule ricalcolato.");
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : "Ricalcolo non riuscito.");
@@ -410,19 +418,64 @@ export default function AdminPage() {
     }
   }
 
-  const days = useMemo(() => weekDays(), []);
+  const sidebarItemClass = (isActive: boolean) =>
+    `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left font-semibold transition-colors ${
+      isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+    }`;
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900 sm:px-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div><p className="text-sm font-semibold uppercase tracking-widest text-blue-600">Amministrazione</p><h1 className="text-3xl font-bold">Dashboard ticket</h1></div>
-          <div className="flex flex-wrap gap-3">
-            <Link className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:border-blue-400 hover:text-blue-700" href="/admin/time-entries">Registro attività</Link>
-            <Link className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:border-blue-400 hover:text-blue-700" href="/admin/contracts">Contratti</Link>
-            <button className="rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isRunning} onClick={() => void runSchedule()} type="button">{isRunning ? "Pianificazione..." : "Ricalcola schedule"}</button>
+    <div className="flex min-h-screen flex-col text-slate-900 md:flex-row">
+      <header className="grid grid-cols-3 items-center border-b border-slate-200 bg-white px-4 py-3 md:hidden">
+        <button
+          aria-label="Apri menu"
+          className="justify-self-start rounded-lg p-2 text-xl"
+          onClick={() => setIsSidebarOpen(true)}
+          type="button"
+        >
+          ☰
+        </button>
+        <h1 className="text-center font-bold">Dashboard ticket</h1>
+      </header>
+      {isSidebarOpen && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-40 bg-slate-900/50 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+      <aside className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white transition-transform duration-300 ${
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      } md:sticky md:top-0 md:flex md:translate-x-0`}>
+        <div className="flex items-start justify-between border-b border-slate-200 p-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-600">Amministrazione</p>
+            <h1 className="mt-1 text-xl font-bold">Dashboard ticket</h1>
           </div>
-        </header>
+          <button
+            aria-label="Chiudi menu"
+            className="rounded-lg p-2 md:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+            type="button"
+          >
+            ✕
+          </button>
+        </div>
+        <nav className="flex-1 space-y-1 p-4" aria-label="Sezioni dashboard">
+          <button aria-pressed={activeTab === "oggi"} className={sidebarItemClass(activeTab === "oggi")} onClick={() => { setActiveTab("oggi"); setIsSidebarOpen(false); }} type="button">📅 Oggi</button>
+          <button aria-pressed={activeTab === "tickets"} className={sidebarItemClass(activeTab === "tickets")} onClick={() => { setActiveTab("tickets"); setIsSidebarOpen(false); }} type="button">🎫 Ticket</button>
+          <button aria-pressed={activeTab === "diary"} className={sidebarItemClass(activeTab === "diary")} onClick={() => { setActiveTab("diary"); setIsSidebarOpen(false); }} type="button">📖 Diario</button>
+          <button aria-pressed={activeTab === "contracts"} className={sidebarItemClass(activeTab === "contracts")} onClick={() => { setActiveTab("contracts"); setIsSidebarOpen(false); }} type="button">📝 Contratti</button>
+          <Link className={sidebarItemClass(false)} href="/admin/time-entries" onClick={() => setIsSidebarOpen(false)}>⏱ Registro attività</Link>
+          <Link className={sidebarItemClass(false)} href="/admin/reports" onClick={() => setIsSidebarOpen(false)}>📊 Report</Link>
+        </nav>
+        <div className="mt-auto border-t border-slate-200 p-4">
+          <button className="w-full rounded-lg bg-blue-600 px-3 py-2.5 text-left font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isRunning} onClick={() => void runSchedule()} type="button">
+            {isRunning ? "Pianificazione..." : "Ricalcola schedule"}
+          </button>
+        </div>
+      </aside>
+      <main className="min-w-0 flex-1 bg-slate-50 p-6">
+        <div className="mx-auto max-w-7xl space-y-6">
         {message && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-emerald-700">{message}</p>}
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-red-700">{error}</p>}
 
@@ -442,13 +495,6 @@ export default function AdminPage() {
             Mostra anche in pausa
           </label>
         </section>}
-
-        <nav className="flex gap-2 border-b border-slate-200" aria-label="Sezioni dashboard">
-          <button className={`rounded-t-lg px-4 py-3 font-semibold ${activeTab === "oggi" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"}`} onClick={() => setActiveTab("oggi")} type="button">Oggi</button>
-          <button className={`rounded-t-lg px-4 py-3 font-semibold ${activeTab === "tickets" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"}`} onClick={() => setActiveTab("tickets")} type="button">Ticket</button>
-          <button className={`rounded-t-lg px-4 py-3 font-semibold ${activeTab === "diary" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"}`} onClick={() => setActiveTab("diary")} type="button">Diario</button>
-          <button className={`rounded-t-lg px-4 py-3 font-semibold ${activeTab === "contracts" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"}`} onClick={() => setActiveTab("contracts")} type="button">Contratti</button>
-        </nav>
 
         {activeTab === "oggi" && <section className="rounded-2xl bg-white p-6 shadow-sm">
           <header className="flex flex-wrap items-start justify-between gap-3">
@@ -546,13 +592,61 @@ export default function AdminPage() {
         )}
 
         <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold">Calendario della settimana</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-5">
-            {days.map((day) => {
-              const dayTickets = tickets.filter((ticket) => !ticket.paused && ticket.scheduledTask && new Date(ticket.scheduledTask.startDate).toDateString() === day.toDateString());
-              return <div className="min-h-32 rounded-xl border border-slate-200 bg-slate-50 p-3" key={day.toISOString()}><h3 className="font-semibold">{new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "short" }).format(day)}</h3>{dayTickets.length === 0 ? <p className="mt-3 text-xs text-slate-500">Nessun ticket</p> : dayTickets.map((ticket) => { const styles = getPriorityStyles(ticket.priority); return <p className={`mt-3 rounded border-l-4 p-2 text-xs font-medium text-slate-900 ${styles.border} ${styles.background}`} key={ticket.id}>{ticket.title}</p>; })}</div>;
-            })}
-          </div>
+          <h2 className="text-xl font-semibold">Prossimi 30 giorni</h2>
+          {heatmapData === null ? (
+            <p className="mt-4 text-slate-500">{isLoadingHeatmap ? "Caricamento..." : "Dati heatmap non disponibili."}</p>
+          ) : (
+            <>
+              <div className="mt-4 grid grid-cols-7 gap-2 text-center text-xs font-semibold text-slate-500">
+                {["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"].map((weekday) => <span key={weekday}>{weekday}</span>)}
+              </div>
+              <div className="mt-2 grid grid-cols-7 gap-2">
+                {Array.from({ length: (new Date(`${heatmapData[0].date}T12:00:00`).getDay() + 6) % 7 }, (_, index) => (
+                  <span aria-hidden="true" key={`spacer-${index}`} />
+                ))}
+                {heatmapData.map((day) => {
+                  const date = new Date(`${day.date}T12:00:00`);
+                  const dateLabel = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(date);
+                  const monthLabel = new Intl.DateTimeFormat("it-IT", { month: "short" }).format(date);
+                  const isToday = day.date === dateKey(new Date());
+                  const colorClass = day.plannedHours === 0
+                    ? "bg-slate-50 text-slate-400"
+                    : day.plannedHours <= 4
+                      ? "bg-emerald-100 text-emerald-800"
+                      : day.plannedHours <= 6
+                        ? "bg-yellow-100 text-yellow-800"
+                        : day.plannedHours <= 8
+                          ? "bg-orange-100 text-orange-800"
+                          : "bg-red-100 text-red-800";
+                  const plannedHoursLabel = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 }).format(day.plannedHours);
+
+                  return (
+                    <div
+                      className={`flex min-h-16 flex-col items-center justify-center rounded-lg p-2 text-sm ${colorClass} ${isToday ? "border-2 border-blue-500 font-bold" : "border border-transparent"}`}
+                      key={day.date}
+                      title={`${dateLabel}: ${plannedHoursLabel}h pianificate (${day.ticketCount} ticket)`}
+                    >
+                      <span>{date.getDate()}</span>
+                      <span className="text-xs">{monthLabel}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-600">
+                {[
+                  ["bg-slate-50", "0h"],
+                  ["bg-emerald-100", ">0–4h"],
+                  ["bg-yellow-100", ">4–6h"],
+                  ["bg-orange-100", ">6–8h"],
+                  ["bg-red-100", ">8h"],
+                ].map(([color, label]) => (
+                  <span className="flex items-center gap-1.5" key={label}>
+                    <span className={`h-3 w-3 rounded-sm ${color}`} />{label}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </section>
         {pausedTickets.length > 0 && (
           <section className="rounded-2xl bg-white p-6 shadow-sm">
@@ -620,7 +714,8 @@ export default function AdminPage() {
         </section>}
         {editing && <div className="fixed inset-0 flex items-center justify-center bg-slate-900/40 px-4"><form className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-xl" onSubmit={saveTicket}><div className="flex justify-between"><h2 className="text-xl font-semibold">Modifica ticket</h2><button onClick={() => setEditing(null)} type="button">✕</button></div><div className="flex items-center gap-2"><p className="font-medium">{editing.title}</p>{editing.paused && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">IN PAUSA</span>}</div><label className="block text-sm font-medium">Priorità<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.priority} name="priority">{priorities.map((priority) => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}</select></label><label className="block text-sm font-medium">Stato<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.status} name="status">{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label><label className="block text-sm font-medium">Ore previste<input className={`mt-2 w-full rounded-lg border px-3 py-2 ${formErrors.oreStimate ? "border-red-500 focus:ring-red-500" : "border-slate-300"}`} defaultValue={editing.oreStimate ?? ""} min="0" name="oreStimate" step="0.5" type="number" />{formErrors.oreStimate && <p className="mt-1 text-sm text-red-600">{formErrors.oreStimate}</p>}</label><label className="block text-sm font-medium">Tariffa oraria (€)<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.hourlyRate ?? ""} min="0" name="hourlyRate" step="1" type="number" /></label><label className="block text-sm font-medium">Prezzo preventivo fisso (€)<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.fixedPrice ?? ""} min="0" name="fixedPrice" step="0.01" type="number" /></label><label className="flex items-center gap-2 text-sm font-medium"><input defaultChecked={editing.showPrice} name="showPrice" type="checkbox" />Mostra prezzo nel tracking</label><label className="block text-sm font-medium">Contratto<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.contractId ?? (contracts.filter((contract) => contract.client.id === editing.client.id).length === 1 ? contracts.find((contract) => contract.client.id === editing.client.id)?.id : "")} name="contractId"><option value="">Nessun contratto</option>{contracts.filter((contract) => contract.client.id === editing.client.id).map((contract) => <option key={contract.id} value={contract.id}>{contract.name} ({contract.type})</option>)}</select></label><label className="block text-sm font-medium">Data di scadenza<input className={`mt-2 w-full rounded-lg border px-3 py-2 ${formErrors.dueDate ? "border-red-500 focus:ring-red-500" : "border-slate-300"}`} defaultValue={editing.dueDate ? editing.dueDate.slice(0, 10) : ""} name="dueDate" type="date" />{formErrors.dueDate && <p className="mt-1 text-sm text-red-600">{formErrors.dueDate}</p>}</label><div className="flex items-center justify-between gap-3"><button className={`rounded-lg px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 ${editing.paused ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}`} disabled={isTogglingPause} onClick={() => void togglePause()} type="button">{isTogglingPause ? "Attendere..." : editing.paused ? "Riprendi" : "Metti in pausa"}</button><div className="flex gap-3"><button className="rounded-lg border border-slate-300 px-4 py-2" disabled={isSaving} onClick={() => setEditing(null)} type="button">Annulla</button><button className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? "Salvataggio..." : "Salva"}</button></div></div></form></div>}
         {deleting && <div aria-labelledby="delete-title" aria-modal="true" className="fixed inset-0 z-10 flex items-center justify-center bg-slate-900/40 px-4" role="dialog"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"><h2 className="text-xl font-semibold" id="delete-title">Eliminare il ticket?</h2><p className="mt-3 text-slate-600">Stai per eliminare definitivamente <strong>{deleting.title}</strong> e i dati associati.</p><div className="mt-6 flex justify-end gap-3"><button className="rounded-lg border border-slate-300 px-4 py-2" disabled={isDeleting} onClick={() => setDeleting(null)} type="button">Annulla</button><button className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isDeleting} onClick={() => void deleteTicket()} type="button">{isDeleting ? "Eliminazione..." : "Elimina"}</button></div></div></div>}
-      </div>
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }
