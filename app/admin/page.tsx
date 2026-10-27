@@ -140,6 +140,7 @@ export default function AdminPage() {
     date.setHours(0, 0, 0, 0);
     return date;
   });
+  const [diaryDaysToShow, setDiaryDaysToShow] = useState(3);
   const [activeTab, setActiveTab] = useState<"oggi" | "tickets" | "diary" | "contracts">("oggi");
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [todayData, setTodayData] = useState<TodayData | null>(null);
@@ -676,19 +677,33 @@ export default function AdminPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold">Diario di lavoro</h2>
-              <p className="mt-1 text-sm text-slate-500">Pianificazione dal {formatDate(dateKey(diaryStart))} al {formatDate(dateKey(diaryDates(diaryStart)[13]))}</p>
+              <p className="mt-1 text-sm text-slate-500">Pianificazione dal {formatDate(dateKey(diaryStart))} al {formatDate(dateKey(diaryDates(diaryStart)[diaryDaysToShow - 1]))}</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex gap-1" aria-label="Giorni da mostrare">
+                {[3, 7, 14].map((days) => (
+                  <button
+                    aria-pressed={diaryDaysToShow === days}
+                    className={`rounded-lg px-3 py-2 text-sm ${diaryDaysToShow === days ? "bg-blue-100 font-semibold text-blue-800" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
+                    key={days}
+                    onClick={() => setDiaryDaysToShow(days)}
+                    type="button"
+                  >
+                    {days} giorni
+                  </button>
+                ))}
+              </div>
               <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => void moveDiaryWeek(-1)} type="button">← Settimana precedente</button>
               <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => void moveDiaryWeek(1)} type="button">Settimana successiva →</button>
             </div>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {diaryDates(diaryStart).map((date) => {
+            {diaryDates(diaryStart).slice(0, diaryDaysToShow).map((date) => {
+              const isToday = dateKey(date) === dateKey(new Date());
               const entries = diary.filter((entry) => dateKey(new Date(entry.date)) === dateKey(date));
               const totalHours = entries.reduce((total, entry) => total + entry.plannedHours, 0);
               const overloaded = entries.some((entry) => entry.overflow) || totalHours > 8;
-              return <div className={`min-h-40 rounded-xl border p-3 ${overloaded ? "border-red-400 bg-red-50" : "border-slate-200 bg-slate-50"}`} key={dateKey(date)}>
+              return <div className={`min-h-40 rounded-xl p-3 ${isToday ? `border-2 border-blue-500 ${overloaded ? "bg-red-50" : "bg-blue-50"}` : overloaded ? "border border-red-400 bg-red-50" : "border border-slate-200 bg-slate-50"}`} key={dateKey(date)}>
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold">{new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "numeric", month: "short" }).format(date)}</h3>
                   <span className={`text-xs font-semibold ${overloaded ? "text-red-700" : "text-slate-600"}`}>{formatHours(totalHours)}h / 8h</span>
