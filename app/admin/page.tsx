@@ -44,6 +44,22 @@ type Contract = {
   client: { id: string; name: string };
   tickets: { id: string; title: string; status: string }[];
 };
+type TodayData = {
+  data: string;
+  orePianificateOggi: number;
+  oreLibere: number;
+  ticketsOggi: {
+    id: string;
+    title: string;
+    clientName: string;
+    priority: string;
+    orePianificateOggi: number;
+    dueDate: string | null;
+    inRitardo: boolean;
+  }[];
+  ticketsInPausa: { id: string; title: string; clientName: string; pausedAt: string | null }[];
+  totaleInRitardo: number;
+};
 
 const priorities = ["low", "normal", "high", "urgent"];
 const statuses = ["new", "open", "in_progress", "completed", "cancelled"];
@@ -60,6 +76,12 @@ const statusLabels: Record<string, string> = {
   completed: "Completato",
   cancelled: "Annullato",
 };
+const todayPriorityBorders: Record<string, string> = {
+  urgent: "border-l-red-500",
+  high: "border-l-orange-500",
+  normal: "border-l-yellow-500",
+  low: "border-l-emerald-500",
+};
 
 function formatDate(value: string | null) {
   if (!value) return "Non disponibile";
@@ -69,6 +91,14 @@ function formatDate(value: string | null) {
 
 function formatHours(value: number) {
   return (Math.round(value * 100) / 100).toFixed(2);
+}
+
+function formatDuration(value: number) {
+  const totalMinutes = Math.round(value * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return minutes ? `${minutes}m` : "0h";
+  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
 }
 
 function weekDays() {
@@ -122,8 +152,10 @@ export default function AdminPage() {
     date.setHours(0, 0, 0, 0);
     return date;
   });
-  const [activeTab, setActiveTab] = useState<"tickets" | "diary" | "contracts">("tickets");
+  const [activeTab, setActiveTab] = useState<"oggi" | "tickets" | "diary" | "contracts">("oggi");
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [todayData, setTodayData] = useState<TodayData | null>(null);
+  const [isLoadingToday, setIsLoadingToday] = useState(false);
 
   async function request(path: string, init?: RequestInit) {
     const headers = new Headers(init?.headers);
@@ -166,6 +198,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadTickets(), 0);
+    void loadTodayData();
     return () => window.clearTimeout(timer);
     // Initial data load should run once when the dashboard mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,6 +212,23 @@ export default function AdminPage() {
   async function loadPausedTickets() {
     const result = await request("/api/admin/tickets?onlyPaused=true");
     setPausedTickets(result.tickets);
+  }
+
+  async function loadTodayData() {
+    setIsLoadingToday(true);
+    setError("");
+    try {
+      const result = await request("/api/admin/today");
+      setTodayData(result);
+    } catch (todayError) {
+      if (todayError instanceof Error && todayError.message === "AUTH_REQUIRED") {
+        router.replace("/admin/login");
+      } else {
+        setError(todayError instanceof Error ? todayError.message : "Impossibile caricare la giornata.");
+      }
+    } finally {
+      setIsLoadingToday(false);
+    }
   }
 
   async function resumeTicket(ticketId: string) {
@@ -236,6 +286,27 @@ export default function AdminPage() {
     }
   }
 
+  async function openTicketFromToday(id: string) {
+    const currentTicket = tickets.find((ticket) => ticket.id === id);
+    if (currentTicket) {
+      setFormErrors({});
+      setEditing(currentTicket);
+      return;
+    }
+
+    try {
+      const fullTicket: Ticket = await request("/api/admin/tickets/" + id);
+      setFormErrors({});
+      setEditing(fullTicket);
+    } catch (openError) {
+      if (openError instanceof Error && openError.message === "AUTH_REQUIRED") {
+        router.replace("/admin/login");
+        return;
+      }
+      setError(openError instanceof Error ? openError.message : "Impossibile aprire il ticket.");
+    }
+  }
+
   async function runSchedule() {
     if (isRunning) return;
     setIsRunning(true);
@@ -244,6 +315,7 @@ export default function AdminPage() {
     try {
       await request("/api/admin/schedule/run", { method: "POST" });
       await loadTickets();
+      await loadTodayData();
       setMessage("Schedule ricalcolato.");
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : "Ricalcolo non riuscito.");
@@ -354,7 +426,7 @@ export default function AdminPage() {
         {message && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-emerald-700">{message}</p>}
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-red-700">{error}</p>}
 
-        <section className="flex flex-wrap gap-3 rounded-2xl bg-white p-4 shadow-sm">
+        {activeTab === "tickets" && <section className="flex flex-wrap gap-3 rounded-2xl bg-white p-4 shadow-sm">
           <select className="rounded-lg border border-slate-300 px-3 py-2" onChange={(event) => {           const value = event.target.value; setStatusFilter(value); setPage(1); void loadTickets(value, priorityFilter, 1, showPaused); }} value={statusFilter}>
             <option value="">Tutti gli stati</option>{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
           </select>
@@ -369,13 +441,94 @@ export default function AdminPage() {
             />
             Mostra anche in pausa
           </label>
-        </section>
+        </section>}
 
         <nav className="flex gap-2 border-b border-slate-200" aria-label="Sezioni dashboard">
+          <button className={`rounded-t-lg px-4 py-3 font-semibold ${activeTab === "oggi" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"}`} onClick={() => setActiveTab("oggi")} type="button">Oggi</button>
           <button className={`rounded-t-lg px-4 py-3 font-semibold ${activeTab === "tickets" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"}`} onClick={() => setActiveTab("tickets")} type="button">Ticket</button>
           <button className={`rounded-t-lg px-4 py-3 font-semibold ${activeTab === "diary" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"}`} onClick={() => setActiveTab("diary")} type="button">Diario</button>
           <button className={`rounded-t-lg px-4 py-3 font-semibold ${activeTab === "contracts" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-900"}`} onClick={() => setActiveTab("contracts")} type="button">Contratti</button>
         </nav>
+
+        {activeTab === "oggi" && <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <header className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold">La tua giornata</h2>
+              <p className="mt-1 capitalize text-slate-500">
+                {todayData
+                  ? new Intl.DateTimeFormat("it-IT", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    }).format(new Date(`${todayData.data}T12:00:00`))
+                  : "Caricamento..."}
+              </p>
+            </div>
+            <button
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isLoadingToday}
+              onClick={() => void loadTodayData()}
+              type="button"
+            >
+              {isLoadingToday ? "Aggiornamento..." : "Aggiorna"}
+            </button>
+          </header>
+
+          {todayData ? <>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                ["Ore pianificate oggi", formatDuration(todayData.orePianificateOggi)],
+                ["Ore libere", formatDuration(todayData.oreLibere)],
+                ["Ticket in ritardo", String(todayData.totaleInRitardo)],
+                ["Ticket in pausa", String(todayData.ticketsInPausa.length)],
+              ].map(([label, value]) => (
+                <article className="rounded-xl border border-slate-200 bg-slate-50 p-4" key={label}>
+                  <p className="text-sm text-slate-500">{label}</p>
+                  <p className="mt-1 text-2xl font-bold">{value}</p>
+                </article>
+              ))}
+            </div>
+
+            <h3 className="mt-8 text-xl font-semibold">Cosa fare oggi</h3>
+            {todayData.ticketsOggi.length === 0
+              ? <p className="mt-4 rounded-xl bg-slate-50 p-5 text-slate-600">Nessun ticket pianificato per oggi. Goditi la giornata!</p>
+              : <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {todayData.ticketsOggi.map((ticket) => (
+                    <article
+                      className={`rounded-xl border border-l-4 border-slate-200 p-4 ${todayPriorityBorders[ticket.priority] ?? "border-l-slate-400"} cursor-pointer hover:border-slate-300 hover:shadow-md transition-all`}
+                      key={ticket.id}
+                      onClick={() => void openTicketFromToday(ticket.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          void openTicketFromToday(ticket.id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <h4 className="font-semibold">{ticket.title}</h4>
+                        {ticket.inRitardo && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">IN RITARDO</span>}
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">{ticket.clientName}</p>
+                      <p className="mt-3 text-sm font-medium">{formatDuration(ticket.orePianificateOggi)} pianificate oggi</p>
+                      {ticket.dueDate && <p className="mt-1 text-sm text-slate-500">Scadenza: {formatDate(ticket.dueDate)}</p>}
+                    </article>
+                  ))}
+                </div>}
+
+            {todayData.ticketsInPausa.length > 0 && (
+              <details className="mt-6 rounded-xl border border-slate-200 p-4">
+                <summary className="cursor-pointer font-semibold">In pausa ({todayData.ticketsInPausa.length})</summary>
+                <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-slate-600">
+                  {todayData.ticketsInPausa.map((ticket) => <li key={ticket.id}>{ticket.title}</li>)}
+                </ul>
+              </details>
+            )}
+          </> : <p className="mt-6 text-slate-500">Caricamento dei dati di oggi...</p>}
+        </section>}
 
         {activeTab === "tickets" && <><section className="overflow-x-auto rounded-2xl bg-white shadow-sm">
           {loading ? <p className="p-6 text-slate-500">Caricamento...</p> : (

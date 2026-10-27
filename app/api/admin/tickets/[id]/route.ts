@@ -10,6 +10,42 @@ export const runtime = 'nodejs';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+export async function GET(request: Request, context: RouteContext) {
+  try {
+    const authError = requireAdminPassword(request);
+    if (authError) return authError;
+    const { id } = await context.params;
+    const ticket = await prisma.ticket.findUnique({
+      where: { id },
+      select: {
+        id: true, title: true, token: true, type: true, priority: true, status: true, contractId: true,
+        createdAt: true, dueDate: true, oreStimate: true, hourlyRate: true, fixedPrice: true, showPrice: true,
+        paused: true, pausedAt: true,
+        client: { select: { id: true, name: true, email: true } },
+        contract: { select: { id: true, name: true, type: true, monthlyHoursIncluded: true } },
+        scheduledTask: { select: { startDate: true, endDate: true, sortOrder: true } },
+      },
+    });
+    if (!ticket) return jsonError("Ticket non trovato", 404);
+
+    return NextResponse.json({
+      ...ticket,
+      createdAt: ticket.createdAt.toISOString(),
+      dueDate: ticket.dueDate?.toISOString() ?? null,
+      pausedAt: ticket.pausedAt?.toISOString() ?? null,
+      scheduledTask: ticket.scheduledTask
+        ? {
+            ...ticket.scheduledTask,
+            startDate: ticket.scheduledTask.startDate.toISOString(),
+            endDate: ticket.scheduledTask.endDate.toISOString(),
+          }
+        : null,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     const authError = requireAdminPassword(request);
