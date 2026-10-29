@@ -49,7 +49,8 @@ type DiaryEntry = {
   plannedHours: number;
   overflow: boolean;
   delayed: boolean;
-  ticket: { id: string; title: string; priority: string; oreStimate: number | null; dueDate: string | null };
+  lateVsTarget: boolean;
+  ticket: { id: string; title: string; priority: string; oreStimate: number | null; dueDate: string | null; deadlineType: DeadlineType };
 };
 type Contract = {
   id: string;
@@ -144,6 +145,7 @@ export default function AdminPage() {
   const [editing, setEditing] = useState<Ticket | null>(null);
   const [deadlineType, setDeadlineType] = useState<DeadlineType>("HARD");
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync local form state when the edited ticket changes
     setDeadlineType(editing?.deadlineType ?? "HARD");
   }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [formErrors, setFormErrors] = useState<{ oreStimate?: string; dueDate?: string }>({});
@@ -858,23 +860,44 @@ export default function AdminPage() {
             {diaryDates(diaryStart).slice(0, diaryDaysToShow).map((date) => {
               const isToday = dateKey(date) === dateKey(new Date());
               const entries = diary.filter((entry) => dateKey(new Date(entry.date)) === dateKey(date));
-              const totalHours = entries.reduce((total, entry) => total + entry.plannedHours, 0);
-              const overloaded = entries.some((entry) => entry.overflow) || totalHours > 8;
+              const hardEntries = entries.filter((entry) => entry.ticket.deadlineType === "HARD");
+              const softEntries = entries.filter((entry) => entry.ticket.deadlineType !== "HARD");
+              const hardHours = hardEntries.reduce((total, entry) => total + entry.plannedHours, 0);
+              const softHours = softEntries.reduce((total, entry) => total + entry.plannedHours, 0);
+              const overloaded = hardEntries.some((entry) => entry.overflow) || hardHours > 8;
               return <div className={`min-h-40 rounded-xl p-3 ${isToday ? `border-2 border-blue-500 ${overloaded ? "bg-red-50" : "bg-blue-50"}` : overloaded ? "border border-red-400 bg-red-50" : "border border-slate-200 bg-slate-50"}`} key={dateKey(date)}>
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold">{new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "numeric", month: "short" }).format(date)}</h3>
-                  <span className={`text-xs font-semibold ${overloaded ? "text-red-700" : "text-slate-600"}`}>{formatHours(totalHours)}h / 8h</span>
                 </div>
                 {overloaded && <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-red-700"><AlertTriangle aria-hidden="true" size={14} />Capacità giornaliera superata</p>}
-                {entries.length === 0 ? <p className="mt-4 text-xs text-slate-500">Nessun ticket pianificato</p> : entries.map((entry) => {
-                  const styles = getPriorityStyles(entry.ticket.priority);
-                  return <button className={`mt-2 block w-full rounded border-l-4 p-2 text-left text-xs transition hover:ring-2 hover:ring-blue-300 ${styles.border} ${styles.background}`} key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
-                    <span className="flex items-center justify-between gap-2"><span className="font-semibold">{entry.ticket.title}</span><PriorityBadge priority={entry.ticket.priority} /></span>
-                    <span className="mt-1 block">{formatHours(entry.plannedHours)}h pianificate{entry.ticket.oreStimate == null ? " / quota retainer" : ` / ${formatHours(entry.ticket.oreStimate)}h totali`}</span>
-                    {entry.ticket.dueDate && <span className="mt-1 block text-slate-600">Scadenza: {formatDate(entry.ticket.dueDate)}</span>}
-                    {entry.delayed && <span className="mt-1 block font-semibold text-red-700">Ritardo previsto</span>}
-                  </button>;
-                })}
+                <section aria-label="Da fare" className="mt-3">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h4 className="text-sm font-bold uppercase tracking-wide text-slate-900">DA FARE</h4>
+                    <span className={`text-sm font-semibold ${overloaded ? "text-red-700" : "text-slate-700"}`}>{formatHours(hardHours)}h / 8h</span>
+                  </div>
+                  {hardEntries.length === 0
+                    ? <p className="mt-2 text-xs text-slate-400">Nessun impegno rigido</p>
+                    : hardEntries.map((entry) => {
+                      const styles = getPriorityStyles(entry.ticket.priority);
+                      return <button className={`mt-2 block w-full rounded border-l-4 p-2 text-left text-xs transition hover:ring-2 hover:ring-blue-300 ${styles.border} ${styles.background}`} key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
+                        <span className="flex items-center justify-between gap-2"><span className="font-semibold">{entry.ticket.title}</span><PriorityBadge priority={entry.ticket.priority} /></span>
+                        <span className="mt-1 block">{formatHours(entry.plannedHours)}h pianificate{entry.ticket.oreStimate == null ? " / quota retainer" : ` / ${formatHours(entry.ticket.oreStimate)}h totali`}</span>
+                        {entry.ticket.dueDate && <span className="mt-1 block text-slate-600">Scadenza: {formatDate(entry.ticket.dueDate)}</span>}
+                        {entry.delayed && <span className="mt-1 block font-semibold text-red-700">Ritardo previsto</span>}
+                      </button>;
+                    })}
+                </section>
+                {softEntries.length > 0 && <section aria-label="Non urgente" className="mt-3 rounded-lg border border-dashed border-slate-300 bg-white/60 p-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h4 className="text-xs font-semibold text-slate-500">Non urgente</h4>
+                    <span className="text-xs text-slate-400">({formatHours(softHours)}h)</span>
+                  </div>
+                  {softEntries.map((entry) => <button className="mt-1 block w-full rounded border-l-2 border-slate-300 bg-slate-50 p-1.5 text-left text-[11px] text-slate-600 transition hover:ring-1 hover:ring-blue-300" key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
+                    <span className="flex items-center justify-between gap-2"><span className="font-medium">{entry.ticket.title}</span><span>{formatHours(entry.plannedHours)}h</span></span>
+                    {entry.ticket.deadlineType === "SOFT" && entry.ticket.dueDate && <span className="block text-slate-400">target: {new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(entry.ticket.dueDate))}</span>}
+                    {entry.lateVsTarget && <span className="block font-semibold text-amber-600">Oltre target</span>}
+                  </button>)}
+                </section>}
               </div>;
             })}
           </div>

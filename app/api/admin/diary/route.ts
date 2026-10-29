@@ -32,7 +32,7 @@ export async function GET(request: Request) {
         overflow: true,
         ticket: {
           select: {
-            id: true, title: true, priority: true, oreStimate: true, dueDate: true,
+            id: true, title: true, priority: true, oreStimate: true, dueDate: true, deadlineType: true,
             scheduledTask: { select: { endDate: true } },
           },
         },
@@ -58,6 +58,12 @@ export async function GET(request: Request) {
       days: days.map((day) => ({
         ...day,
         delayed: Boolean(
+          day.ticket.dueDate &&
+          day.ticket.scheduledTask &&
+          startOfDay(day.ticket.scheduledTask.endDate).getTime() > startOfDay(day.ticket.dueDate).getTime()
+        ),
+        lateVsTarget: Boolean(
+          day.ticket.deadlineType !== "HARD" &&
           day.ticket.dueDate &&
           day.ticket.scheduledTask &&
           startOfDay(day.ticket.scheduledTask.endDate).getTime() > startOfDay(day.ticket.dueDate).getTime()
