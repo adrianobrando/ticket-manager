@@ -1,0 +1,3 @@
+CREATE TYPE "DeadlineType" AS ENUM ('HARD', 'SOFT', 'NONE');
+ALTER TABLE "Ticket" ADD COLUMN "deadlineType" "DeadlineType" NOT NULL DEFAULT 'HARD';
+ALTER TABLE "Ticket" ADD COLUMN "weeklyCapHours" DOUBLE PRECISION;

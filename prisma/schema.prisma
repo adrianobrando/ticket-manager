@@ -17,6 +17,12 @@ enum TicketStato {
   done
 }
 
+enum DeadlineType {
+  HARD
+  SOFT
+  NONE
+}
+
 model Client {
   id        String           @id @default(cuid())
   name      String
@@ -57,6 +63,8 @@ model Ticket {
   contractId      String?
   contract        ClientContract? @relation(fields: [contractId], references: [id])
   timeEntries     TimeEntry[]
+  deadlineType    DeadlineType    @default(HARD)
+  weeklyCapHours  Float?
 
   @@index([clientId])
   @@index([status])
