@@ -44,7 +44,7 @@ export function PriorityBadge({ priority }: { priority: string }) {
 }
 
 export function Card({ className = "", ...props }: HTMLAttributes<HTMLElement>) {
-  return <section className={`rounded-2xl bg-white shadow-sm ${className}`} {...props} />;
+  return <section className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`} {...props} />;
 }
 
 export function Badge({ children, className = "" }: { children: ReactNode; className?: string }) {
