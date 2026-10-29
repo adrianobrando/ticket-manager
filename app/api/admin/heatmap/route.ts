@@ -39,8 +39,11 @@ export async function GET(request: Request) {
 
       return {
         date: localDateString(date),
-        plannedHours: 0,
-        ticketIds: new Set<string>(),
+        byType: {
+          HARD: { hours: 0, ticketIds: new Set<string>() },
+          SOFT: { hours: 0, ticketIds: new Set<string>() },
+          NONE: { hours: 0, ticketIds: new Set<string>() },
+        },
       };
     });
     const daysByDate = new Map(days.map((day) => [day.date, day]));
@@ -54,6 +57,7 @@ export async function GET(request: Request) {
         date: true,
         plannedHours: true,
         ticketId: true,
+        ticket: { select: { deadlineType: true } },
       },
     });
 
@@ -61,15 +65,19 @@ export async function GET(request: Request) {
       const day = daysByDate.get(localDateString(workDay.date));
       if (!day) continue;
 
-      day.plannedHours += workDay.plannedHours;
-      day.ticketIds.add(workDay.ticketId);
+      const bucket = day.byType[workDay.ticket.deadlineType];
+      bucket.hours += workDay.plannedHours;
+      bucket.ticketIds.add(workDay.ticketId);
     }
 
     return Response.json(
-      days.map(({ date, plannedHours, ticketIds }) => ({
+      days.map(({ date, byType }) => ({
         date,
-        plannedHours,
-        ticketCount: ticketIds.size,
+        byType: {
+          HARD: { hours: byType.HARD.hours, ticketIds: [...byType.HARD.ticketIds] },
+          SOFT: { hours: byType.SOFT.hours, ticketIds: [...byType.SOFT.ticketIds] },
+          NONE: { hours: byType.NONE.hours, ticketIds: [...byType.NONE.ticketIds] },
+        },
       })),
     );
   } catch (error) {

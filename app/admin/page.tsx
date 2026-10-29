@@ -22,6 +22,8 @@ import {
 import { getPriorityStyles, PriorityBadge } from "@/app/components/ui";
 
 type DeadlineType = "HARD" | "SOFT" | "NONE";
+type HeatmapBucket = { hours: number; ticketIds: string[] };
+type HeatmapDay = { date: string; byType: Record<DeadlineType, HeatmapBucket> };
 
 type Ticket = {
   id: string;
@@ -201,7 +203,8 @@ export default function AdminPage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [todayData, setTodayData] = useState<TodayData | null>(null);
   const [isLoadingToday, setIsLoadingToday] = useState(false);
-  const [heatmapData, setHeatmapData] = useState<{date: string, plannedHours: number, ticketCount: number}[] | null>(null);
+  const [heatmapData, setHeatmapData] = useState<HeatmapDay[] | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
 
   async function request(path: string, init?: RequestInit) {
@@ -811,7 +814,33 @@ export default function AdminPage() {
         )}
 
         <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold">Prossimi 30 giorni</h2>
+          {(() => {
+            const dailyHours = (heatmapData ?? []).map((day) =>
+              day.byType.HARD.hours + (showAll ? day.byType.SOFT.hours + day.byType.NONE.hours : 0));
+            const avg = dailyHours.length ? dailyHours.reduce((a, b) => a + b, 0) / dailyHours.length : 0;
+            const avgLabel = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(avg);
+            return (
+              <div className="flex flex-wrap items-baseline gap-x-3">
+                <h2 className="text-xl font-semibold">Prossimi 30 giorni</h2>
+                {heatmapData && (
+                  <span className="text-sm text-slate-500">
+                    {showAll ? "Tutto il lavoro" : "Davvero impegnato"}: {avgLabel}h medie/giorno
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+          <div className="mt-3 flex gap-2" role="group" aria-label="Vista heatmap">
+            {([[false, "Davvero impegnato"], [true, "Tutto il lavoro"]] as const).map(([value, label]) => (
+              <button
+                aria-pressed={showAll === value}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium ${showAll === value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}
+                key={label}
+                onClick={() => setShowAll(value)}
+                type="button"
+              >{label}</button>
+            ))}
+          </div>
           {heatmapData === null ? (
             <p className="mt-4 text-slate-500">{isLoadingHeatmap ? "Caricamento..." : "Dati heatmap non disponibili."}</p>
           ) : (
@@ -828,22 +857,27 @@ export default function AdminPage() {
                   const dateLabel = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(date);
                   const monthLabel = new Intl.DateTimeFormat("it-IT", { month: "short" }).format(date);
                   const isToday = day.date === dateKey(new Date());
-                  const colorClass = day.plannedHours === 0
+                  const plannedHours = day.byType.HARD.hours + (showAll ? day.byType.SOFT.hours + day.byType.NONE.hours : 0);
+                  const ticketCount = new Set([
+                    ...day.byType.HARD.ticketIds,
+                    ...(showAll ? [...day.byType.SOFT.ticketIds, ...day.byType.NONE.ticketIds] : []),
+                  ]).size;
+                  const colorClass = plannedHours === 0
                     ? "bg-slate-50 text-slate-400"
-                    : day.plannedHours <= 4
+                    : plannedHours <= 4
                       ? "bg-emerald-100 text-emerald-800"
-                      : day.plannedHours <= 6
+                      : plannedHours <= 6
                         ? "bg-yellow-100 text-yellow-800"
-                        : day.plannedHours <= 8
+                        : plannedHours <= 8
                           ? "bg-orange-100 text-orange-800"
                           : "bg-red-100 text-red-800";
-                  const plannedHoursLabel = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 }).format(day.plannedHours);
+                  const plannedHoursLabel = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 }).format(plannedHours);
 
                   return (
                     <div
                       className={`flex min-h-16 flex-col items-center justify-center rounded-lg p-2 text-sm ${colorClass} ${isToday ? "border-2 border-blue-500 font-bold" : "border border-transparent"}`}
                       key={day.date}
-                      title={`${dateLabel}: ${plannedHoursLabel}h pianificate (${day.ticketCount} ticket)`}
+                      title={`${dateLabel}: ${plannedHoursLabel}h pianificate (${ticketCount} ticket)`}
                     >
                       <span>{date.getDate()}</span>
                       <span className="text-xs">{monthLabel}</span>
