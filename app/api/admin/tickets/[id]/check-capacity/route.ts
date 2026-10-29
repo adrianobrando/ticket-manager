@@ -20,8 +20,16 @@ export async function POST(request: Request, context: RouteContext) {
       return jsonError("dueDate e oreStimate non validi", 400);
     }
 
-    const existing = await prisma.ticket.findUnique({ where: { id }, select: { id: true } });
+    const existing = await prisma.ticket.findUnique({
+      where: { id },
+      select: { id: true, deadlineType: true },
+    });
     if (!existing) return jsonError("Ticket non trovato", 404);
+
+    // L'avviso ha senso solo per i ticket HARD
+    if (existing.deadlineType !== "HARD") {
+      return Response.json({ canFit: true, oreMancanti: 0, giorniDiRitardo: 0, oreDisponibili: 0 });
+    }
 
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -36,10 +44,14 @@ export async function POST(request: Request, context: RouteContext) {
     }
     const oreDisponibili = workingDays * WORK_HOURS_PER_DAY;
 
-    // Esclude i WorkDay del ticket stesso: verrebbero ripianificati con le nuove ore
+    // Esclude i WorkDay del ticket stesso (verrebbero ripianificati) e conta solo i ticket HARD
     const agg = await prisma.workDay.aggregate({
       _sum: { plannedHours: true },
-      where: { date: { gte: start, lte: end }, ticketId: { not: id } },
+      where: {
+        date: { gte: start, lte: end },
+        ticketId: { not: id },
+        ticket: { deadlineType: "HARD" },
+      },
     });
     const oreGiaPianificate = agg._sum.plannedHours ?? 0;
 

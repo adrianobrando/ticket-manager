@@ -425,7 +425,7 @@ export default function AdminPage() {
       }
 
       setIsSaving(true);
-      if (data.get("dueDate")) {
+      if (deadlineType === "HARD" && data.get("dueDate")) {
         try {
           const check: { canFit: boolean; oreMancanti?: number; giorniDiRitardo?: number } = await request(
             `/api/admin/tickets/${editing.id}/check-capacity`,
