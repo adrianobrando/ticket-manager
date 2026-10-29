@@ -379,14 +379,6 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
       await tx.workDay.createMany({ data: workDayData });
     }
 
-    // preserve ticket dueDate updates (performed per-ticket as before)
-    for (const ticket of scheduledTickets) {
-      const task = scheduled.get(ticket.id);
-      if (!task) continue;
-      if (!ticket.dueDate && ticket.contract?.type !== "RETAINER" && ticket.deadlineType === "HARD") {
-        await tx.ticket.update({ where: { id: ticket.id }, data: { dueDate: task.endDate } });
-      }
-    }
   }, {
     timeout: 30000,
     maxWait: 10000,
