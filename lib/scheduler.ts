@@ -28,6 +28,7 @@ type TicketForSchedule = {
   status: string;
   createdAt: Date;
   dueDate: Date | null;
+  deadlineType: string;
   oreStimate: number | null;
   client: { name: string; email: string };
   contract: {
@@ -44,6 +45,7 @@ export type ScheduleResult = Omit<TicketForSchedule, "contract"> & {
   scheduledTask: { startDate: Date; endDate: Date; sortOrder: number } | null;
   workDays: { date: Date; plannedHours: number }[];
   delayed: boolean;
+  lateVsTarget: boolean;
 };
 
 type Allocation = { date: Date; plannedHours: number };
@@ -178,6 +180,7 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
     select: {
       id: true, token: true, title: true, priority: true, status: true, createdAt: true,
       dueDate: true, oreStimate: true,
+      deadlineType: true,
       client: { select: { name: true, email: true } },
       contract: {
         select: { id: true, type: true, monthlyHoursIncluded: true, startDate: true, endDate: true, isActive: true },
@@ -251,8 +254,11 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
     return a.createdAt.getTime() - b.createdAt.getTime();
   }
 
+  const hourlyHard = hourlyTickets.filter(t => t.deadlineType === "HARD");
+  const hourlySoft = hourlyTickets.filter(t => t.deadlineType !== "HARD");
+
   for (const priority of priorityTiers) {
-    const tierTickets = hourlyTickets.filter((t) => t.priority === priority).sort(sortByDueThenCreated);
+    const tierTickets = hourlyHard.filter((t) => t.priority === priority).sort(sortByDueThenCreated);
     for (const ticket of tierTickets) {
       const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
       const end = ticket.dueDate ?? horizonEnd;
@@ -309,6 +315,23 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
     }
   }
 
+  // I soft/none occupano solo la capacità residua (hard e retainer hanno già prenotato)
+  for (const ticket of hourlySoft.sort(compareTickets)) {
+    const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
+    if (remaining <= 0) continue;
+    const end = ticket.dueDate ?? horizonEnd;
+    const days = workDaysBetween(now, end);
+    const ticketAllocations: Allocation[] = [];
+    let overflowCents = allocateHours(remaining, days, dailyLoad, ticketAllocations, MAX_TICKET_HOURS_PER_DAY);
+    while (overflowCents > 0) {
+      const next = days.length ? nextWorkDay(days[days.length - 1]) : toWorkCursor(now);
+      days.push(next);
+      overflowCents = allocateHours(overflowCents / HOURS_PRECISION, [next], dailyLoad, ticketAllocations, MAX_TICKET_HOURS_PER_DAY);
+    }
+    allocations.set(ticket.id, ticketAllocations);
+    scheduledTickets.push(ticket);
+  }
+
   for (let sortOrder = 0; sortOrder < scheduledTickets.length; sortOrder++) {
     const ticket = scheduledTickets[sortOrder];
     const ticketDays = allocations.get(ticket.id) ?? [];
@@ -360,7 +383,7 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
     for (const ticket of scheduledTickets) {
       const task = scheduled.get(ticket.id);
       if (!task) continue;
-      if (!ticket.dueDate && ticket.contract?.type !== "RETAINER") {
+      if (!ticket.dueDate && ticket.contract?.type !== "RETAINER" && ticket.deadlineType === "HARD") {
         await tx.ticket.update({ where: { id: ticket.id }, data: { dueDate: task.endDate } });
       }
     }
@@ -376,8 +399,13 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
       scheduledTask: task,
       workDays: allocations.get(ticket.id) ?? [],
       delayed: Boolean(
-        ticket.dueDate &&
-        task &&
+        ticket.deadlineType === "HARD" &&
+        ticket.dueDate && task &&
+        startOfDay(task.endDate).getTime() > startOfDay(ticket.dueDate).getTime()
+      ),
+      lateVsTarget: Boolean(
+        ticket.deadlineType !== "HARD" &&
+        ticket.dueDate && task &&
         startOfDay(task.endDate).getTime() > startOfDay(ticket.dueDate).getTime()
       ),
     };
