@@ -3,7 +3,25 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  BarChart3,
+  BookOpen,
+  CalendarDays,
+  Check,
+  Clock3,
+  Copy,
+  ExternalLink,
+  FileText,
+  Menu,
+  Pencil,
+  Ticket as TicketIcon,
+  Trash2,
+  X,
+} from "lucide-react";
 import { getPriorityStyles, PriorityBadge } from "@/app/components/ui";
+
+type DeadlineType = "HARD" | "SOFT" | "NONE";
 
 type Ticket = {
   id: string;
@@ -14,6 +32,7 @@ type Ticket = {
   status: string;
   createdAt: string;
   dueDate: string | null;
+  deadlineType: DeadlineType;
   oreStimate: number | null;
   hourlyRate: number | null;
   fixedPrice: number | null;
@@ -117,10 +136,16 @@ export default function AdminPage() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
+  const [copyErrorTicketId, setCopyErrorTicketId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [showPaused, setShowPaused] = useState(false);
   const [editing, setEditing] = useState<Ticket | null>(null);
+  const [deadlineType, setDeadlineType] = useState<DeadlineType>("HARD");
+  useEffect(() => {
+    setDeadlineType(editing?.deadlineType ?? "HARD");
+  }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [formErrors, setFormErrors] = useState<{ oreStimate?: string; dueDate?: string }>({});
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -186,6 +211,21 @@ export default function AdminPage() {
       setLoading(false);
     }
 
+  }
+
+  async function copyTrackingToken(ticket: Ticket) {
+    setCopiedTicketId(null);
+    setCopyErrorTicketId(null);
+    try {
+      const trackingUrl = new URL(
+        `/t/${encodeURIComponent(ticket.token)}`,
+        window.location.origin,
+      ).toString();
+      await navigator.clipboard.writeText(trackingUrl);
+      setCopiedTicketId(ticket.id);
+    } catch {
+      setCopyErrorTicketId(ticket.id);
+    }
   }
 
   useEffect(() => {
@@ -350,31 +390,33 @@ export default function AdminPage() {
         setFormErrors({ oreStimate: "Inserisci le ore previste (maggiori di zero)" });
         return;
       }
-      if (!data.get("dueDate")) {
+      if (deadlineType === "HARD" && !data.get("dueDate")) {
         setFormErrors({ dueDate: "Inserisci la data di consegna" });
         return;
       }
 
       setIsSaving(true);
-      try {
-        const check: { canFit: boolean; oreMancanti?: number; giorniDiRitardo?: number } = await request(
-          `/api/admin/tickets/${editing.id}/check-capacity`,
-          { method: "POST", body: JSON.stringify({ dueDate: data.get("dueDate"), oreStimate }) },
-        );
-        if (!check.canFit) {
-          setPendingSaveData(data);
-          const confirmed = window.confirm(
-            `Attenzione: la scadenza non è realistica. Ti servono ${check.oreMancanti} ore in più ` +
-              `(giorni di ritardo stimati: ${check.giorniDiRitardo}). Vuoi salvare comunque?`,
+      if (data.get("dueDate")) {
+        try {
+          const check: { canFit: boolean; oreMancanti?: number; giorniDiRitardo?: number } = await request(
+            `/api/admin/tickets/${editing.id}/check-capacity`,
+            { method: "POST", body: JSON.stringify({ dueDate: data.get("dueDate"), oreStimate }) },
           );
-          if (!confirmed) {
-            setPendingSaveData(null);
-            setIsSaving(false);
-            return;
+          if (!check.canFit) {
+            setPendingSaveData(data);
+            const confirmed = window.confirm(
+              `Attenzione: la scadenza non è realistica. Ti servono ${check.oreMancanti} ore in più ` +
+                `(giorni di ritardo stimati: ${check.giorniDiRitardo}). Vuoi salvare comunque?`,
+            );
+            if (!confirmed) {
+              setPendingSaveData(null);
+              setIsSaving(false);
+              return;
+            }
           }
+        } catch {
+          // il check è solo informativo: se fallisce, il salvataggio prosegue
         }
-      } catch {
-        // il check è solo informativo: se fallisce, il salvataggio prosegue
       }
       setPendingSaveData(null);
       setIsSaving(false);
@@ -400,6 +442,7 @@ export default function AdminPage() {
           showPrice: data.get("showPrice") === "on",
           contractId: data.get("contractId") || null,
           dueDate: data.get("dueDate") || null,
+          deadlineType,
         }),
       });
       setEditing(null);
@@ -463,7 +506,7 @@ export default function AdminPage() {
           onClick={() => setIsSidebarOpen(true)}
           type="button"
         >
-          ☰
+          <Menu aria-hidden="true" size={20} />
         </button>
         <h1 className="text-center font-bold">Dashboard ticket</h1>
       </header>
@@ -488,16 +531,16 @@ export default function AdminPage() {
             onClick={() => setIsSidebarOpen(false)}
             type="button"
           >
-            ✕
+            <X aria-hidden="true" size={20} />
           </button>
         </div>
         <nav className="flex-1 space-y-1 p-4" aria-label="Sezioni dashboard">
-          <button aria-pressed={activeTab === "oggi"} className={sidebarItemClass(activeTab === "oggi")} onClick={() => { setActiveTab("oggi"); setIsSidebarOpen(false); }} type="button">📅 Oggi</button>
-          <button aria-pressed={activeTab === "tickets"} className={sidebarItemClass(activeTab === "tickets")} onClick={() => { setActiveTab("tickets"); setIsSidebarOpen(false); }} type="button">🎫 Ticket</button>
-          <button aria-pressed={activeTab === "diary"} className={sidebarItemClass(activeTab === "diary")} onClick={() => { setActiveTab("diary"); setIsSidebarOpen(false); }} type="button">📖 Diario</button>
-          <button aria-pressed={activeTab === "contracts"} className={sidebarItemClass(activeTab === "contracts")} onClick={() => { setActiveTab("contracts"); setIsSidebarOpen(false); }} type="button">📝 Contratti</button>
-          <Link className={sidebarItemClass(false)} href="/admin/time-entries" onClick={() => setIsSidebarOpen(false)}>⏱ Registro attività</Link>
-          <Link className={sidebarItemClass(false)} href="/admin/reports" onClick={() => setIsSidebarOpen(false)}>📊 Report</Link>
+          <button aria-pressed={activeTab === "oggi"} className={sidebarItemClass(activeTab === "oggi")} onClick={() => { setActiveTab("oggi"); setIsSidebarOpen(false); }} type="button"><CalendarDays aria-hidden="true" size={18} /><span>Oggi</span></button>
+          <button aria-pressed={activeTab === "tickets"} className={sidebarItemClass(activeTab === "tickets")} onClick={() => { setActiveTab("tickets"); setIsSidebarOpen(false); }} type="button"><TicketIcon aria-hidden="true" size={18} /><span>Ticket</span></button>
+          <button aria-pressed={activeTab === "diary"} className={sidebarItemClass(activeTab === "diary")} onClick={() => { setActiveTab("diary"); setIsSidebarOpen(false); }} type="button"><BookOpen aria-hidden="true" size={18} /><span>Diario</span></button>
+          <button aria-pressed={activeTab === "contracts"} className={sidebarItemClass(activeTab === "contracts")} onClick={() => { setActiveTab("contracts"); setIsSidebarOpen(false); }} type="button"><FileText aria-hidden="true" size={18} /><span>Contratti</span></button>
+          <Link className={sidebarItemClass(false)} href="/admin/time-entries" onClick={() => setIsSidebarOpen(false)}><Clock3 aria-hidden="true" size={18} /><span>Registro attività</span></Link>
+          <Link className={sidebarItemClass(false)} href="/admin/reports" onClick={() => setIsSidebarOpen(false)}><BarChart3 aria-hidden="true" size={18} /><span>Report</span></Link>
         </nav>
         <div className="mt-auto border-t border-slate-200 p-4">
           <button className="w-full rounded-lg bg-blue-600 px-3 py-2.5 text-left font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isRunning} onClick={() => void runSchedule()} type="button">
@@ -609,8 +652,92 @@ export default function AdminPage() {
 
         {activeTab === "tickets" && <><section className="overflow-x-auto rounded-2xl bg-white shadow-sm">
           {loading ? <p className="p-6 text-slate-500">Caricamento...</p> : (
-            <table className="w-full min-w-[1050px] text-left text-sm"><thead className="border-b border-slate-200 bg-slate-50"><tr>{["Titolo", "Cliente", "Tipo", "Priorità", "Stato", "Tracking", "Data stimata", "Azioni"].map((heading) => <th className="px-4 py-3 font-semibold" key={heading}>{heading}</th>)}</tr></thead>
-              <tbody>{tickets.map((ticket) => { const styles = getPriorityStyles(ticket.priority); return <tr className={`border-b border-l-4 border-slate-100 last:border-0 ${styles.border} ${styles.background}`} key={ticket.id}><td className="px-4 py-4 font-medium"><span className="flex items-center gap-2">{ticket.title}{(!ticket.contract || ticket.contract.type !== "RETAINER") && (ticket.oreStimate ?? 0) <= 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">DA STIMARE</span>}{ticket.paused && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">IN PAUSA</span>}</span></td><td className="px-4 py-4">{ticket.client.name}<br /><span className="text-xs text-slate-600">{ticket.client.email}</span></td><td className="px-4 py-4">{ticket.type}</td><td className="px-4 py-4"><PriorityBadge priority={ticket.priority} /></td><td className="px-4 py-4">{statusLabels[ticket.status] || ticket.status}</td><td className="px-4 py-4"><code className="select-all rounded bg-slate-100 px-2 py-1 text-xs text-slate-700">{ticket.token}</code><br /><a className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline" href={`/t/${encodeURIComponent(ticket.token)}`} target="_blank" rel="noreferrer">Apri tracking</a></td><td className="px-4 py-4">{formatDate(ticket.dueDate)}</td><td className="flex gap-3 px-4 py-4"><button className="font-medium text-blue-700 hover:underline" onClick={() => { setFormErrors({}); setEditing(ticket); }}>Modifica</button><button aria-label={`Elimina ${ticket.title}`} className="text-red-700 hover:text-red-900" onClick={() => setDeleting(ticket)} title="Elimina" type="button">🗑</button></td></tr>; })}</tbody>
+            <table className="w-full min-w-[1050px] text-left text-sm">
+              <thead className="border-b border-slate-200 bg-white">
+                <tr>
+                  {["Titolo", "Cliente", "Tipo", "Priorità", "Stato", "Tracking", "Data stimata", "Azioni"].map((heading) => (
+                    <th className="px-4 py-3 font-semibold text-slate-800" key={heading}>{heading}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tickets.map((ticket) => {
+                  const styles = getPriorityStyles(ticket.priority);
+                  return (
+                    <tr className={`border-b border-l-4 border-slate-100 last:border-0 ${styles.border} ${styles.background}`} key={ticket.id}>
+                      <td className="px-4 py-4 font-medium">
+                        <span className="flex items-center gap-2">
+                          {ticket.title}
+                          {(!ticket.contract || ticket.contract.type !== "RETAINER") && (ticket.oreStimate ?? 0) <= 0 && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">DA STIMARE</span>
+                          )}
+                          {ticket.paused && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">IN PAUSA</span>}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        {ticket.client.name}
+                        <br />
+                        <span className="text-xs text-slate-600">{ticket.client.email}</span>
+                      </td>
+                      <td className="px-4 py-4">{ticket.type}</td>
+                      <td className="px-4 py-4"><PriorityBadge priority={ticket.priority} /></td>
+                      <td className="px-4 py-4">{statusLabels[ticket.status] || ticket.status}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-col items-start gap-2">
+                          <a
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
+                            href={`/t/${encodeURIComponent(ticket.token)}`}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <ExternalLink aria-hidden="true" size={14} />
+                            Apri tracking
+                          </a>
+                          <button
+                            aria-label={copiedTicketId === ticket.id ? "Link di tracking copiato" : `Copia link di tracking per ${ticket.title}`}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                            onClick={() => void copyTrackingToken(ticket)}
+                            type="button"
+                          >
+                            {copiedTicketId === ticket.id
+                              ? <Check aria-hidden="true" size={14} />
+                              : <Copy aria-hidden="true" size={14} />}
+                            {copiedTicketId === ticket.id ? "Link copiato" : "Copia link"}
+                          </button>
+                          {copyErrorTicketId === ticket.id && (
+                            <span aria-live="polite" className="max-w-40 text-xs text-red-700">
+                              Copia del link non riuscita. Verifica i permessi del browser.
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">{formatDate(ticket.dueDate)}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            aria-label={`Modifica ${ticket.title}`}
+                            className="rounded-lg p-2 text-blue-700 transition hover:bg-blue-50"
+                            onClick={() => { setFormErrors({}); setEditing(ticket); }}
+                            title="Modifica"
+                            type="button"
+                          >
+                            <Pencil aria-hidden="true" size={16} />
+                          </button>
+                          <button
+                            aria-label={`Elimina ${ticket.title}`}
+                            className="rounded-lg p-2 text-red-700 transition hover:bg-red-50"
+                            onClick={() => setDeleting(ticket)}
+                            title="Elimina"
+                            type="button"
+                          >
+                            <Trash2 aria-hidden="true" size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
             </table>
           )}
         </section>
@@ -738,7 +865,7 @@ export default function AdminPage() {
                   <h3 className="font-semibold">{new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "numeric", month: "short" }).format(date)}</h3>
                   <span className={`text-xs font-semibold ${overloaded ? "text-red-700" : "text-slate-600"}`}>{formatHours(totalHours)}h / 8h</span>
                 </div>
-                {overloaded && <p className="mt-2 text-xs font-semibold text-red-700">⚠ Capacità giornaliera superata</p>}
+                {overloaded && <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-red-700"><AlertTriangle aria-hidden="true" size={14} />Capacità giornaliera superata</p>}
                 {entries.length === 0 ? <p className="mt-4 text-xs text-slate-500">Nessun ticket pianificato</p> : entries.map((entry) => {
                   const styles = getPriorityStyles(entry.ticket.priority);
                   return <button className={`mt-2 block w-full rounded border-l-4 p-2 text-left text-xs transition hover:ring-2 hover:ring-blue-300 ${styles.border} ${styles.background}`} key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
@@ -757,7 +884,84 @@ export default function AdminPage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2">{contracts.map((contract) => { const included = contract.monthlyHoursIncluded ?? 0; const percentage = included ? Math.min(100, (contract.registeredHours / included) * 100) : 0; return <article className="rounded-xl border border-slate-200 p-4" key={contract.id}><div className="flex justify-between gap-3"><div><h3 className="font-semibold">{contract.client.name}</h3><p className="text-sm text-slate-500">{contract.name} · {contract.type === "RETAINER" ? "Retainer" : "Hourly"}</p></div><span className="text-sm font-semibold">{contract.hourlyRate.toFixed(2)} €/h</span></div>{contract.type === "RETAINER" ? <><div className="mt-4 flex justify-between text-sm"><span>{formatHours(included)}h incluse</span><span>{formatHours(contract.registeredHours)}h registrate</span><span>{formatHours(contract.remainingHours)}h rimanenti</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className={`h-full ${contract.remainingHours < 0 ? "bg-red-500" : "bg-blue-600"}`} style={{ width: `${percentage}%` }} /></div></> : <p className="mt-4 text-sm">{formatHours(contract.registeredHours)}h registrate</p>}{contract.tickets.length > 0 && <p className="mt-3 text-xs text-slate-500">Ticket: {contract.tickets.slice(0, 3).map((ticket) => ticket.title).join(", ")}</p>}<Link className="mt-4 inline-block text-sm font-semibold text-blue-700" href={`/admin/reports?contractId=${contract.id}`}>Report</Link></article>; })}</div>
           {contracts.length === 0 && <p className="mt-4 text-sm text-slate-500">Nessun contratto attivo.</p>}
         </section>}
-        {editing && <div className="fixed inset-0 flex items-center justify-center bg-slate-900/40 px-4"><form className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-xl" onSubmit={saveTicket}><div className="flex justify-between"><h2 className="text-xl font-semibold">Modifica ticket</h2><button onClick={() => setEditing(null)} type="button">✕</button></div><div className="flex items-center gap-2"><p className="font-medium">{editing.title}</p>{editing.paused && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">IN PAUSA</span>}</div><label className="block text-sm font-medium">Priorità<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.priority} name="priority">{priorities.map((priority) => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}</select></label><label className="block text-sm font-medium">Stato<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.status} name="status">{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label><label className="block text-sm font-medium">Ore previste<input className={`mt-2 w-full rounded-lg border px-3 py-2 ${formErrors.oreStimate ? "border-red-500 focus:ring-red-500" : "border-slate-300"}`} defaultValue={editing.oreStimate ?? ""} min="0" name="oreStimate" step="0.5" type="number" />{formErrors.oreStimate && <p className="mt-1 text-sm text-red-600">{formErrors.oreStimate}</p>}</label><label className="block text-sm font-medium">Tariffa oraria (€)<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.hourlyRate ?? ""} min="0" name="hourlyRate" step="1" type="number" /></label><label className="block text-sm font-medium">Prezzo preventivo fisso (€)<input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.fixedPrice ?? ""} min="0" name="fixedPrice" step="0.01" type="number" /></label><label className="flex items-center gap-2 text-sm font-medium"><input defaultChecked={editing.showPrice} name="showPrice" type="checkbox" />Mostra prezzo nel tracking</label><label className="block text-sm font-medium">Contratto<select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.contractId ?? (contracts.filter((contract) => contract.client.id === editing.client.id).length === 1 ? contracts.find((contract) => contract.client.id === editing.client.id)?.id : "")} name="contractId"><option value="">Nessun contratto</option>{contracts.filter((contract) => contract.client.id === editing.client.id).map((contract) => <option key={contract.id} value={contract.id}>{contract.name} ({contract.type})</option>)}</select></label><label className="block text-sm font-medium">Data di scadenza<input className={`mt-2 w-full rounded-lg border px-3 py-2 ${formErrors.dueDate ? "border-red-500 focus:ring-red-500" : "border-slate-300"}`} defaultValue={editing.dueDate ? editing.dueDate.slice(0, 10) : ""} name="dueDate" type="date" />{formErrors.dueDate && <p className="mt-1 text-sm text-red-600">{formErrors.dueDate}</p>}</label><div className="flex items-center justify-between gap-3"><button className={`rounded-lg px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 ${editing.paused ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}`} disabled={isTogglingPause} onClick={() => void togglePause()} type="button">{isTogglingPause ? "Attendere..." : editing.paused ? "Riprendi" : "Metti in pausa"}</button><div className="flex gap-3"><button className="rounded-lg border border-slate-300 px-4 py-2" disabled={isSaving} onClick={() => setEditing(null)} type="button">Annulla</button><button className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">{isSaving ? "Salvataggio..." : "Salva"}</button></div></div></form></div>}
+        {editing && (
+          <div className="fixed inset-0 flex items-center justify-center bg-slate-900/40 px-4">
+            <form className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-xl" onSubmit={saveTicket}>
+              <div className="flex justify-between">
+                <h2 className="text-xl font-semibold">Modifica ticket</h2>
+                <button aria-label="Chiudi modifica" onClick={() => setEditing(null)} type="button">
+                  <X aria-hidden="true" size={18} />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <p className="font-medium">{editing.title}</p>
+                {editing.paused && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">IN PAUSA</span>}
+              </div>
+              <label className="block text-sm font-medium">
+                Priorità
+                <select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.priority} name="priority">
+                  {priorities.map((priority) => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}
+                </select>
+              </label>
+              <label className="block text-sm font-medium">
+                Stato
+                <select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.status} name="status">
+                  {statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+                </select>
+              </label>
+              <label className="block text-sm font-medium">
+                Ore previste
+                <input className={`mt-2 w-full rounded-lg border px-3 py-2 ${formErrors.oreStimate ? "border-red-500 focus:ring-red-500" : "border-slate-300"}`} defaultValue={editing.oreStimate ?? ""} min="0" name="oreStimate" step="0.5" type="number" />
+                {formErrors.oreStimate && <p className="mt-1 text-sm text-red-600">{formErrors.oreStimate}</p>}
+              </label>
+              <label className="block text-sm font-medium">
+                Tariffa oraria (€)
+                <input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.hourlyRate ?? ""} min="0" name="hourlyRate" step="1" type="number" />
+              </label>
+              <label className="block text-sm font-medium">
+                Prezzo preventivo fisso (€)
+                <input className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.fixedPrice ?? ""} min="0" name="fixedPrice" step="0.01" type="number" />
+              </label>
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input defaultChecked={editing.showPrice} name="showPrice" type="checkbox" />
+                Mostra prezzo nel tracking
+              </label>
+              <label className="block text-sm font-medium">
+                Contratto
+                <select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" defaultValue={editing.contractId ?? (contracts.filter((contract) => contract.client.id === editing.client.id).length === 1 ? contracts.find((contract) => contract.client.id === editing.client.id)?.id : "")} name="contractId">
+                  <option value="">Nessun contratto</option>
+                  {contracts.filter((contract) => contract.client.id === editing.client.id).map((contract) => <option key={contract.id} value={contract.id}>{contract.name} ({contract.type})</option>)}
+                </select>
+              </label>
+              <label className="block text-sm font-medium">
+                Tipo scadenza
+                <select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" name="deadlineType" onChange={(e) => setDeadlineType(e.target.value as DeadlineType)} value={deadlineType}>
+                  <option value="HARD">Rigida</option>
+                  <option value="SOFT">Morbida</option>
+                  <option value="NONE">Nessuna</option>
+                </select>
+              </label>
+              {deadlineType !== "NONE" && (
+                <label className="block text-sm font-medium">
+                  {deadlineType === "SOFT" ? "Data target (opzionale)" : "Scadenza"}
+                  <input className={`mt-2 w-full rounded-lg border px-3 py-2 ${formErrors.dueDate ? "border-red-500 focus:ring-red-500" : "border-slate-300"}`} defaultValue={editing.dueDate ? editing.dueDate.slice(0, 10) : ""} name="dueDate" type="date" />
+                  {formErrors.dueDate && <p className="mt-1 text-sm text-red-600">{formErrors.dueDate}</p>}
+                </label>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <button className={`rounded-lg px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 ${editing.paused ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}`} disabled={isTogglingPause} onClick={() => void togglePause()} type="button">
+                  {isTogglingPause ? "Attendere..." : editing.paused ? "Riprendi" : "Metti in pausa"}
+                </button>
+                <div className="flex gap-3">
+                  <button className="rounded-lg border border-slate-300 px-4 py-2" disabled={isSaving} onClick={() => setEditing(null)} type="button">Annulla</button>
+                  <button className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={isSaving} type="submit">
+                    {isSaving ? "Salvataggio..." : "Salva"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
         {deleting && <div aria-labelledby="delete-title" aria-modal="true" className="fixed inset-0 z-10 flex items-center justify-center bg-slate-900/40 px-4" role="dialog"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"><h2 className="text-xl font-semibold" id="delete-title">Eliminare il ticket?</h2><p className="mt-3 text-slate-600">Stai per eliminare definitivamente <strong>{deleting.title}</strong> e i dati associati.</p><div className="mt-6 flex justify-end gap-3"><button className="rounded-lg border border-slate-300 px-4 py-2" disabled={isDeleting} onClick={() => setDeleting(null)} type="button">Annulla</button><button className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60" disabled={isDeleting} onClick={() => void deleteTicket()} type="button">{isDeleting ? "Eliminazione..." : "Elimina"}</button></div></div></div>}
         </div>
       </main>

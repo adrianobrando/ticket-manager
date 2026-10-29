@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     }
 
     const input = createTicketSchema.parse(Object.fromEntries(formData.entries()));
-    const { title, description, type, priority, clientName, clientEmail, oreStimate, contractId, dueDate } = input;
+    const { title, description, type, priority, clientName, clientEmail, oreStimate, contractId, dueDate, deadlineType } = input;
 
     const client = await prisma.client.upsert({
       where: { email: clientEmail },
@@ -64,6 +64,7 @@ export async function POST(request: Request) {
         clientId: client.id,
         contractId: contractId ?? null,
         dueDate: dueDate ?? null,
+        deadlineType,
       },
       select: { id: true, title: true, token: true, client: { select: { name: true, email: true } } },
     });

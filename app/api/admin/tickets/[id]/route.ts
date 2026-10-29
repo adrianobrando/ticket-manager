@@ -19,7 +19,7 @@ export async function GET(request: Request, context: RouteContext) {
       where: { id },
       select: {
         id: true, title: true, token: true, type: true, priority: true, status: true, contractId: true,
-        createdAt: true, dueDate: true, oreStimate: true, hourlyRate: true, fixedPrice: true, showPrice: true,
+        createdAt: true, dueDate: true, deadlineType: true, oreStimate: true, hourlyRate: true, fixedPrice: true, showPrice: true,
         paused: true, pausedAt: true,
         client: { select: { id: true, name: true, email: true } },
         contract: { select: { id: true, name: true, type: true, monthlyHoursIncluded: true } },
