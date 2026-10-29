@@ -24,6 +24,22 @@ function localDateString(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function getDeadlineStatus(
+  deadlineType: string,
+  dueDate: Date | null,
+  scheduledEndDate: Date | null,
+) {
+  const beyondTarget = Boolean(
+    dueDate &&
+    scheduledEndDate &&
+    startOfDay(scheduledEndDate).getTime() > startOfDay(dueDate).getTime()
+  );
+  return {
+    delayed: deadlineType === "HARD" && beyondTarget,
+    lateVsTarget: deadlineType !== "HARD" && beyondTarget,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const authError = requireAdminPassword(request);
@@ -51,7 +67,10 @@ export async function GET(request: Request) {
           id: true,
           title: true,
           pausedAt: true,
+          dueDate: true,
+          deadlineType: true,
           client: { select: { name: true } },
+          scheduledTask: { select: { endDate: true } },
         },
       }),
       prisma.ticket.findMany({
@@ -60,7 +79,11 @@ export async function GET(request: Request) {
           scheduledTask: { isNot: null },
         },
         select: {
+          id: true,
+          title: true,
           dueDate: true,
+          deadlineType: true,
+          client: { select: { name: true } },
           scheduledTask: { select: { endDate: true } },
         },
       }),
@@ -84,12 +107,32 @@ export async function GET(request: Request) {
       0,
     );
 
-    const totaleInRitardo = lateCandidates.filter(
-      (ticket) =>
-        ticket.dueDate !== null &&
-        ticket.scheduledTask !== null &&
-        ticket.scheduledTask.endDate > ticket.dueDate,
+    const lateCandidatesWithStatus = lateCandidates.map((ticket) => ({
+      ...ticket,
+      ...getDeadlineStatus(
+        ticket.deadlineType,
+        ticket.dueDate,
+        ticket.scheduledTask?.endDate ?? null,
+      ),
+    }));
+
+    const totaleInRitardo = lateCandidatesWithStatus.filter(
+      (ticket) => ticket.deadlineType === "HARD" && ticket.delayed,
     ).length;
+
+    const ticketsSoftOltreTarget = lateCandidatesWithStatus.flatMap((ticket) =>
+      ticket.lateVsTarget && ticket.dueDate && ticket.scheduledTask
+        ? [{
+            id: ticket.id,
+            title: ticket.title,
+            clientName: ticket.client.name,
+            deadlineType: ticket.deadlineType,
+            lateVsTarget: ticket.lateVsTarget,
+            dueDate: ticket.dueDate.toISOString(),
+            scheduledTaskEndDate: ticket.scheduledTask.endDate.toISOString(),
+          }]
+        : [],
+    );
 
     return Response.json({
       data: localDateString(today),
@@ -97,11 +140,18 @@ export async function GET(request: Request) {
       oreLibere: Math.max(0, 8 - orePianificateOggi),
       ticketsOggi: workDays.map((workDay) => {
         const { ticket } = workDay;
+        const deadlineStatus = getDeadlineStatus(
+          ticket.deadlineType,
+          ticket.dueDate,
+          ticket.scheduledTask?.endDate ?? null,
+        );
         return {
           id: ticket.id,
           title: ticket.title,
           clientName: ticket.client.name,
           priority: ticket.priority,
+          deadlineType: ticket.deadlineType,
+          ...deadlineStatus,
           oreStimate: ticket.oreStimate,
           orePianificateOggi: workDay.plannedHours,
           dueDate: ticket.dueDate?.toISOString() ?? null,
@@ -116,8 +166,15 @@ export async function GET(request: Request) {
         id: ticket.id,
         title: ticket.title,
         clientName: ticket.client.name,
+        deadlineType: ticket.deadlineType,
+        lateVsTarget: getDeadlineStatus(
+          ticket.deadlineType,
+          ticket.dueDate,
+          ticket.scheduledTask?.endDate ?? null,
+        ).lateVsTarget,
         pausedAt: ticket.pausedAt?.toISOString() ?? null,
       })),
+      ticketsSoftOltreTarget,
       totaleInRitardo,
     });
   } catch (error) {

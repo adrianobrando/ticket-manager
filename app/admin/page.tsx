@@ -73,11 +73,30 @@ type TodayData = {
     title: string;
     clientName: string;
     priority: string;
+    deadlineType: DeadlineType;
+    delayed: boolean;
+    lateVsTarget: boolean;
     orePianificateOggi: number;
     dueDate: string | null;
     inRitardo: boolean;
   }[];
-  ticketsInPausa: { id: string; title: string; clientName: string; pausedAt: string | null }[];
+  ticketsInPausa: {
+    id: string;
+    title: string;
+    clientName: string;
+    deadlineType: DeadlineType;
+    lateVsTarget: boolean;
+    pausedAt: string | null;
+  }[];
+  ticketsSoftOltreTarget: {
+    id: string;
+    title: string;
+    clientName: string;
+    deadlineType: DeadlineType;
+    lateVsTarget: boolean;
+    dueDate: string;
+    scheduledTaskEndDate: string;
+  }[];
   totaleInRitardo: number;
 };
 
@@ -123,6 +142,14 @@ function formatDuration(value: number) {
 
 function dateKey(date: Date) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
+function daysBetweenDates(from: string, to: string) {
+  const fromDate = new Date(from);
+  const toDate = new Date(to);
+  const fromDay = Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate());
+  const toDay = Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate());
+  return Math.round((toDay - fromDay) / 86400000);
 }
 
 function diaryDates(start: Date) {
@@ -498,6 +525,14 @@ export default function AdminPage() {
     `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left font-semibold transition-colors ${
       isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
     }`;
+  const ticketsHardOggi = todayData?.ticketsOggi.filter(
+    (ticket) => ticket.deadlineType === "HARD",
+  ) ?? [];
+  const oreHardPianificateOggi = ticketsHardOggi.reduce(
+    (total, ticket) => total + ticket.orePianificateOggi,
+    0,
+  );
+  const oreLibereOggi = Math.max(0, 8 - oreHardPianificateOggi);
 
   return (
     <div className="flex min-h-screen flex-col text-slate-900 md:flex-row">
@@ -600,8 +635,8 @@ export default function AdminPage() {
           {todayData ? <>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                ["Ore pianificate oggi", formatDuration(todayData.orePianificateOggi)],
-                ["Ore libere", formatDuration(todayData.oreLibere)],
+                ["Ore pianificate oggi", formatDuration(oreHardPianificateOggi)],
+                ["Ore libere", formatDuration(oreLibereOggi)],
                 ["Ticket in ritardo", String(todayData.totaleInRitardo)],
                 ["Ticket in pausa", String(todayData.ticketsInPausa.length)],
               ].map(([label, value]) => (
@@ -612,11 +647,34 @@ export default function AdminPage() {
               ))}
             </div>
 
+            {todayData.ticketsSoftOltreTarget.length > 0 && (
+              <details className="mt-4 rounded-xl border border-amber-200 p-4">
+                <summary className="cursor-pointer font-semibold">
+                  Soft oltre target ({todayData.ticketsSoftOltreTarget.length})
+                </summary>
+                <ul className="mt-3 space-y-3 text-sm">
+                  {todayData.ticketsSoftOltreTarget.map((ticket) => {
+                    const daysBeyond = daysBetweenDates(ticket.dueDate, ticket.scheduledTaskEndDate);
+                    return (
+                      <li className="rounded-lg bg-amber-50 p-3" key={ticket.id}>
+                        <p className="font-semibold">{ticket.title}</p>
+                        <p className="text-slate-600">{ticket.clientName}</p>
+                        <p className="mt-1 text-slate-600">Target: {formatDate(ticket.dueDate)}</p>
+                        <p className="font-medium text-amber-800">
+                          {daysBeyond} {daysBeyond === 1 ? "giorno" : "giorni"} oltre
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
+            )}
+
             <h3 className="mt-8 text-xl font-semibold">Cosa fare oggi</h3>
-            {todayData.ticketsOggi.length === 0
+            {ticketsHardOggi.length === 0
               ? <p className="mt-4 rounded-xl bg-slate-50 p-5 text-slate-600">Nessun ticket pianificato per oggi. Goditi la giornata!</p>
               : <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  {todayData.ticketsOggi.map((ticket) => (
+                  {ticketsHardOggi.map((ticket) => (
                     <article
                       className={`rounded-xl border border-l-4 border-slate-200 p-4 ${todayPriorityBorders[ticket.priority] ?? "border-l-slate-400"} cursor-pointer hover:border-slate-300 hover:shadow-md transition-all`}
                       key={ticket.id}
