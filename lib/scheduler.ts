@@ -211,12 +211,17 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   const tickets = ticketsFromDatabase as TicketForSchedule[];
   const scheduledTickets: TicketForSchedule[] = [];
 
+  const remainingFor = (ticket: TicketForSchedule) => {
+    const left = (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0);
+    return EXCLUDED_STATUSES.includes(ticket.status) ? Math.max(0, left) : Math.max(1, left);
+  };
+
   // Hourly contracts retain the old finite-estimate behavior.
   function computeDailyCap(ticket: TicketForSchedule, workDaysLeft: Date[]) {
     const priorityCap = ticket.priority === "urgent" || ticket.priority === "high" ? 4
       : ticket.priority === "normal" ? 2
       : 1.5;
-    const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
+    const remaining = remainingFor(ticket);
     const perDayLimit = workDaysLeft.length ? remaining / workDaysLeft.length : priorityCap;
 
     let finalCap: number;
@@ -241,7 +246,7 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   }
 
   const hourlyTickets = tickets.filter((ticket) => ticket.contract?.type !== "RETAINER"
-    && (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0) > 0);
+    && remainingFor(ticket) > 0);
 
   // Process hourly tickets in priority tiers so higher priority tiers reserve capacity first.
   const priorityTiers = ["urgent", "high", "normal", "low"] as const;
@@ -260,7 +265,7 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   for (const priority of priorityTiers) {
     const tierTickets = hourlyHard.filter((t) => t.priority === priority).sort(sortByDueThenCreated);
     for (const ticket of tierTickets) {
-      const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
+      const remaining = remainingFor(ticket);
       const end = ticket.dueDate ?? horizonEnd;
       const days = workDaysBetween(now, end);
       const ticketAllocations: Allocation[] = [];
@@ -317,7 +322,7 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
 
   // I soft/none occupano solo la capacità residua (hard e retainer hanno già prenotato)
   for (const ticket of hourlySoft.sort(compareTickets)) {
-    const remaining = Math.max(0, (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0));
+    const remaining = remainingFor(ticket);
     if (remaining <= 0) continue;
     const end = ticket.dueDate ?? horizonEnd;
     const days = workDaysBetween(now, end);

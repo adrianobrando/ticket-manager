@@ -34,6 +34,7 @@ type Ticket = {
   dueDate: string | null;
   deadlineType: DeadlineType;
   oreStimate: number | null;
+  oreConsuntivate: number;
   hourlyRate: number | null;
   fixedPrice: number | null;
   showPrice: boolean;
@@ -994,6 +995,11 @@ export default function AdminPage() {
                 Ore previste
                 <input className={`mt-2 w-full rounded-lg border px-3 py-2 ${formErrors.oreStimate ? "border-red-500 focus:ring-red-500" : "border-slate-300"}`} defaultValue={editing.oreStimate ?? ""} min="0" name="oreStimate" step="0.5" type="number" />
                 {formErrors.oreStimate && <p className="mt-1 text-sm text-red-600">{formErrors.oreStimate}</p>}
+                {(editing.oreStimate ?? 0) > 0 && editing.oreConsuntivate > (editing.oreStimate ?? 0) && (
+                  <p className="mt-1 text-sm font-medium text-orange-600">
+                    Sforamento: +{formatHours(editing.oreConsuntivate - (editing.oreStimate ?? 0))}h rispetto alle ore previste
+                  </p>
+                )}
               </label>
               <label className="block text-sm font-medium">
                 Tariffa oraria (€)

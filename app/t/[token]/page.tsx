@@ -49,6 +49,13 @@ function formatDate(value: string | null) {
   }).format(date);
 }
 
+function formatDateOnly(value: string | null) {
+  if (!value) return "Non disponibile";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Non disponibile";
+  return new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long", year: "numeric" }).format(date);
+}
+
 function formatPrice(value: number) {
   return new Intl.NumberFormat("it-IT", {
     style: "currency",
@@ -243,7 +250,7 @@ export default function TicketTrackingPage({
             </div>
             <div>
               <dt className="text-sm text-slate-500">Completamento stimato</dt>
-              <dd className="mt-1 font-medium">{formatDate(ticket.dueDate)}</dd>
+              <dd className="mt-1 font-medium">{formatDateOnly(ticket.dueDate)}</dd>
             </div>
             {ticket.price != null && (
               <div>
