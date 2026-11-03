@@ -32,6 +32,11 @@ const monthRange = (offset: number) => {
 };
 const formatDate = (value: string) => new Intl.DateTimeFormat("it-IT", { dateStyle: "medium" }).format(new Date(value));
 const formatTime = (value: string) => new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+const monthLabel = (date: Date) => {
+  const label = new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(date);
+  return label.charAt(0).toUpperCase() + label.slice(1);
+};
+const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
 
 function ReportsContent() {
   const searchParams = useSearchParams();
@@ -44,6 +49,7 @@ function ReportsContent() {
   const [selectedTicket, setSelectedTicket] = useState(ticketId ?? "");
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
+  const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
 
   async function load() {
     const query = new URLSearchParams({ from, to });
@@ -77,6 +83,16 @@ function ReportsContent() {
     }
   }
 
+  // Sposta il mese visualizzato e riallinea l'intervallo che alimenta la tabella.
+  function goToMonth(date: Date) {
+    const month = startOfMonth(date);
+    const today = startOfMonth(new Date());
+    setCurrentMonth(month);
+    setFrom(dateKey(month));
+    setTo(dateKey(new Date(month.getFullYear(), month.getMonth() + 1, 0)));
+    setPeriod(month.getTime() === today.getTime() ? "current" : "custom");
+  }
+
   const title = report?.contract?.name ?? report?.ticket?.title ?? "Report ore lavorate";
   const clientName = report?.contract?.client.name ?? report?.ticket?.client.name;
   const activities = report
@@ -105,6 +121,22 @@ function ReportsContent() {
             <p className="mt-2 max-w-xs text-xs text-slate-500">Nell’anteprima del browser puoi stampare il report o scegliere &quot;Salva come PDF&quot;.</p>
           </div>
         </header>
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm print:hidden">
+          <h2 aria-live="polite" className="text-xl font-semibold">{monthLabel(currentMonth)}</h2>
+          <div className="flex flex-wrap gap-2">
+            <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" onClick={() => goToMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} type="button">← Mese prec.</button>
+            <button className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={() => goToMonth(new Date())} type="button">Mese corrente</button>
+            <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50" onClick={() => goToMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} type="button">Mese succ. →</button>
+          </div>
+        </section>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 print:hidden">
+          {["Ore lavorate per Cliente", "Fatturato stimato per Cliente", "Distribuzione tipo scadenza"].map((chartTitle) => (
+            <section className="rounded-2xl bg-white p-6 shadow-sm" key={chartTitle}>
+              <h2 className="text-lg font-semibold">{chartTitle}</h2>
+              <div className="mt-4 flex h-64 items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-500">Grafico in caricamento...</div>
+            </section>
+          ))}
+        </div>
         <section className="rounded-2xl bg-white p-5 shadow-sm print:hidden">
           <div className="flex flex-wrap items-end gap-4">
             <label className="text-sm font-medium">Periodo<select className="mt-2 block rounded-lg border px-3 py-2" onChange={(event) => selectPeriod(event.target.value)} value={period}><option value="current">Mese corrente</option><option value="previous">Mese scorso</option><option value="custom">Personalizzato</option></select></label>
