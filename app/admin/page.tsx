@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Archive,
   BarChart3,
+  Bell,
   BookOpen,
   CalendarDays,
   Check,
@@ -15,6 +16,7 @@ import {
   Copy,
   ExternalLink,
   FileText,
+  Flame,
   List,
   ListTodo,
   Menu,
@@ -25,6 +27,67 @@ import {
   X,
 } from "lucide-react";
 import { getPriorityStyles, PriorityBadge } from "@/app/components/ui";
+
+type AppNotification = { id: string; text: string; icon: "alert" | "clock" | "flame"; onClick?: () => void };
+
+function NotificationBell({ notifications }: { notifications: AppNotification[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClick = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [isOpen]);
+
+  const icons = {
+    alert: <AlertTriangle aria-hidden="true" className="mt-0.5 shrink-0 text-red-600" size={16} />,
+    clock: <Clock3 aria-hidden="true" className="mt-0.5 shrink-0 text-amber-600" size={16} />,
+    flame: <Flame aria-hidden="true" className="mt-0.5 shrink-0 text-orange-600" size={16} />,
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        aria-expanded={isOpen}
+        aria-label="Notifiche"
+        className="relative rounded-lg p-2 text-slate-700 hover:bg-slate-100"
+        onClick={() => setIsOpen((open) => !open)}
+        type="button"
+      >
+        <Bell aria-hidden="true" size={20} />
+        {notifications.length > 0 && (
+          <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+        )}
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 top-full z-50 mt-2 max-h-80 w-72 overflow-y-auto rounded-xl bg-white p-2 text-slate-900 shadow-lg ring-1 ring-slate-200">
+          {notifications.length === 0 ? (
+            <p className="px-3 py-4 text-center text-sm text-slate-600">Tutto tranquillo, nessuna notifica</p>
+          ) : (
+            <ul className="space-y-1">
+              {notifications.map((n) => (
+                <li
+                  className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50${n.onClick ? " cursor-pointer" : ""}`}
+                  key={n.id}
+                  onClick={n.onClick ? () => { n.onClick?.(); setIsOpen(false); } : undefined}
+                >
+                  {icons[n.icon]}
+                  <span>{n.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type DeadlineType = "HARD" | "SOFT" | "NONE";
 type HeatmapBucket = { hours: number; ticketIds: string[] };
@@ -102,6 +165,13 @@ type TodayData = {
     clientName: string;
     deadlineType: DeadlineType;
     lateVsTarget: boolean;
+    dueDate: string;
+    scheduledTaskEndDate: string;
+  }[];
+  ticketsHardInRitardo: {
+    id: string;
+    title: string;
+    clientName: string;
     dueDate: string;
     scheduledTaskEndDate: string;
   }[];
@@ -622,6 +692,41 @@ export default function AdminPage() {
     0,
   );
   const oreLibereOggi = Math.max(0, 8 - oreHardPianificateOggi);
+  const goToAccordion = (accordionId: string) => {
+    setActiveTab("oggi");
+    setTimeout(() => {
+      const el = document.getElementById(accordionId) as HTMLDetailsElement | null;
+      if (el) {
+        el.open = true;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 80);
+  };
+  const notifications: AppNotification[] = [];
+  if (todayData && todayData.totaleInRitardo > 0) {
+    notifications.push({
+      id: "late",
+      icon: "alert",
+      text: `⚠️ Hai ${todayData.totaleInRitardo} ticket HARD in ritardo.`,
+      onClick: () => goToAccordion("hard-late-accordion"),
+    });
+  }
+  if (todayData && todayData.ticketsSoftOltreTarget.length > 0) {
+    notifications.push({
+      id: "soft",
+      icon: "clock",
+      text: `⏳ ${todayData.ticketsSoftOltreTarget.length} ticket Soft sono oltre target.`,
+      onClick: () => goToAccordion("soft-late-accordion"),
+    });
+  }
+  if (oreHardPianificateOggi > 8) {
+    notifications.push({
+      id: "overload",
+      icon: "flame",
+      text: `🔥 Oggi sei in sovraccarico (${formatDuration(oreHardPianificateOggi)} HARD pianificate).`,
+      onClick: () => setActiveTab("diary"),
+    });
+  }
 
   return (
     <div className="flex min-h-screen flex-col text-slate-900 md:flex-row">
@@ -635,6 +740,9 @@ export default function AdminPage() {
           <Menu aria-hidden="true" size={20} />
         </button>
         <h1 className="text-center font-bold">Dashboard ticket</h1>
+        <div className="justify-self-end">
+          <NotificationBell notifications={notifications} />
+        </div>
       </header>
       {isSidebarOpen && (
         <div
@@ -676,6 +784,9 @@ export default function AdminPage() {
       </aside>
       <main className="min-w-0 flex-1 bg-slate-50 p-6">
         <div className="mx-auto max-w-7xl space-y-6">
+        <div className="hidden items-center justify-end md:flex">
+          <NotificationBell notifications={notifications} />
+        </div>
         {message && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-emerald-700">{message}</p>}
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-red-700">{error}</p>}
 
@@ -753,8 +864,33 @@ export default function AdminPage() {
               ))}
             </div>
 
+            {todayData.ticketsHardInRitardo.length > 0 && (
+              <details className="mt-4 rounded-xl border border-red-200 p-4" id="hard-late-accordion">
+                <summary className="cursor-pointer font-semibold">
+                  Ticket HARD in ritardo ({todayData.ticketsHardInRitardo.length})
+                </summary>
+                <ul className="mt-3 space-y-3 text-sm">
+                  {todayData.ticketsHardInRitardo.map((ticket) => {
+                    const daysLate = daysBetweenDates(ticket.dueDate, ticket.scheduledTaskEndDate);
+                    return (
+                      <li className="rounded-lg bg-red-50 p-3" key={ticket.id}>
+                        <p className="font-semibold">{ticket.title}</p>
+                        <p className="text-slate-600">{ticket.clientName}</p>
+                        <p className="mt-1 text-slate-600">
+                          Scadenza: {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short" }).format(new Date(ticket.dueDate))}
+                        </p>
+                        <p className="font-medium text-red-600">
+                          {daysLate} {daysLate === 1 ? "giorno" : "giorni"} di ritardo
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
+            )}
+
             {todayData.ticketsSoftOltreTarget.length > 0 && (
-              <details className="mt-4 rounded-xl border border-amber-200 p-4">
+              <details className="mt-4 rounded-xl border border-amber-200 p-4" id="soft-late-accordion">
                 <summary className="cursor-pointer font-semibold">
                   Soft oltre target ({todayData.ticketsSoftOltreTarget.length})
                 </summary>

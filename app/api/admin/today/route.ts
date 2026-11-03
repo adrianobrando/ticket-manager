@@ -134,6 +134,18 @@ export async function GET(request: Request) {
         : [],
     );
 
+    const ticketsHardInRitardo = lateCandidatesWithStatus.flatMap((ticket) =>
+      ticket.deadlineType === "HARD" && ticket.delayed && ticket.dueDate && ticket.scheduledTask
+        ? [{
+            id: ticket.id,
+            title: ticket.title,
+            clientName: ticket.client.name,
+            dueDate: ticket.dueDate.toISOString(),
+            scheduledTaskEndDate: ticket.scheduledTask.endDate.toISOString(),
+          }]
+        : [],
+    );
+
     return Response.json({
       data: localDateString(today),
       orePianificateOggi,
@@ -175,6 +187,7 @@ export async function GET(request: Request) {
         pausedAt: ticket.pausedAt?.toISOString() ?? null,
       })),
       ticketsSoftOltreTarget,
+      ticketsHardInRitardo,
       totaleInRitardo,
     });
   } catch (error) {
