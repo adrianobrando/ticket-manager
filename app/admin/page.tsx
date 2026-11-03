@@ -5,15 +5,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Archive,
   BarChart3,
   BookOpen,
   CalendarDays,
   Check,
+  CheckCircle2,
   Clock3,
   Copy,
   ExternalLink,
   FileText,
+  List,
+  ListTodo,
   Menu,
+  PauseCircle,
   Pencil,
   Ticket as TicketIcon,
   Trash2,
@@ -125,6 +130,8 @@ const todayPriorityBorders: Record<string, string> = {
   low: "border-l-emerald-500",
 };
 
+const TICKETS_PER_PAGE = 20;
+
 function formatDate(value: string | null) {
   if (!value) return "Non disponibile";
   const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date(value);
@@ -169,9 +176,8 @@ export default function AdminPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
   const [copyErrorTicketId, setCopyErrorTicketId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [ticketFilter, setTicketFilter] = useState<"todo" | "paused" | "completed" | "all" | "archived">("todo");
   const [priorityFilter, setPriorityFilter] = useState("");
-  const [showPaused, setShowPaused] = useState(false);
   const [editing, setEditing] = useState<Ticket | null>(null);
   const [deadlineType, setDeadlineType] = useState<DeadlineType>("HARD");
   useEffect(() => {
@@ -188,7 +194,6 @@ export default function AdminPage() {
   const [isTogglingPause, setIsTogglingPause] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [deleting, setDeleting] = useState<Ticket | null>(null);
   const [diary, setDiary] = useState<DiaryEntry[]>([]);
   const [pausedTickets, setPausedTickets] = useState<Ticket[]>([]);
@@ -207,6 +212,22 @@ export default function AdminPage() {
   const [showAll, setShowAll] = useState(false);
   const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
 
+  const filteredTickets = tickets.filter((ticket) => {
+    if (priorityFilter && ticket.priority !== priorityFilter) return false;
+    if (ticketFilter === "todo") {
+      return ticket.status !== "completed" && ticket.status !== "cancelled" && !ticket.paused;
+    }
+    if (ticketFilter === "paused") {
+      return ticket.paused && ticket.status !== "completed" && ticket.status !== "cancelled";
+    }
+    if (ticketFilter === "completed") return ticket.status === "completed";
+    if (ticketFilter === "all") return ticket.status !== "cancelled";
+    return ticket.status === "cancelled";
+  });
+  const totalPages = Math.max(1, Math.ceil(filteredTickets.length / TICKETS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const visibleTickets = filteredTickets.slice((currentPage - 1) * TICKETS_PER_PAGE, currentPage * TICKETS_PER_PAGE);
+
   async function request(path: string, init?: RequestInit) {
     const headers = new Headers(init?.headers);
     headers.set("Content-Type", "application/json");
@@ -220,19 +241,21 @@ export default function AdminPage() {
     return data;
   }
 
-  async function loadTickets(nextStatus = statusFilter, nextPriority = priorityFilter, nextPage = page, nextIncludePaused = showPaused) {
+  async function loadTickets() {
     setLoading(true);
     setError("");
     try {
-      const query = new URLSearchParams();
-      if (nextStatus) query.set("status", nextStatus);
-      if (nextPriority) query.set("priority", nextPriority);
-      if (nextIncludePaused) query.set("includePaused", "true");
-      query.set("page", String(nextPage));
-      const result = await request(`/api/admin/tickets?${query}`);
-      setTickets(result.tickets);
-      setPage(result.page);
-      setTotalPages(result.totalPages);
+      // L'API limita pageSize a 100: scarico tutte le pagine, filtro e impagino in locale.
+      const all: Ticket[] = [];
+      let nextPage = 1;
+      let pages = 1;
+      do {
+        const result = await request(`/api/admin/tickets?includePaused=true&pageSize=100&page=${nextPage}`);
+        all.push(...result.tickets);
+        pages = result.totalPages;
+        nextPage += 1;
+      } while (nextPage <= pages);
+      setTickets(all);
       await Promise.all([loadDiary(diaryStart), loadContracts(), loadPausedTickets()]);
     } catch (loadError) {
       if (loadError instanceof Error && loadError.message === "AUTH_REQUIRED") {
@@ -594,21 +617,38 @@ export default function AdminPage() {
         {message && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-emerald-700">{message}</p>}
         {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-red-700">{error}</p>}
 
-        {activeTab === "tickets" && <section className="flex flex-wrap gap-3 rounded-2xl bg-white p-4 shadow-sm">
-          <select className="rounded-lg border border-slate-300 px-3 py-2" onChange={(event) => {           const value = event.target.value; setStatusFilter(value); setPage(1); void loadTickets(value, priorityFilter, 1, showPaused); }} value={statusFilter}>
-            <option value="">Tutti gli stati</option>{statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
-          </select>
-          <select className="rounded-lg border border-slate-300 px-3 py-2" onChange={(event) => {           const value = event.target.value; setPriorityFilter(value); setPage(1); void loadTickets(statusFilter, value, 1, showPaused); }} value={priorityFilter}>
+        {activeTab === "tickets" && <section className="flex flex-wrap items-center gap-4 rounded-2xl bg-white p-4 shadow-sm">
+          <nav aria-label="Filtra ticket" className="flex flex-wrap items-center gap-2">
+            {([
+              ["todo", "Da Fare", ListTodo],
+              ["paused", "In Pausa", PauseCircle],
+              ["completed", "Completati", CheckCircle2],
+              ["all", "Tutti", List],
+            ] as const).map(([filter, label, Icon]) => (
+              <button
+                aria-pressed={ticketFilter === filter}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition ${ticketFilter === filter ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}
+                key={filter}
+                onClick={() => { setTicketFilter(filter); setPage(1); }}
+                type="button"
+              >
+                <Icon aria-hidden="true" size={16} />
+                {label}
+              </button>
+            ))}
+            <button
+              aria-pressed={ticketFilter === "archived"}
+              className={`ml-4 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition ${ticketFilter === "archived" ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}
+              onClick={() => { setTicketFilter("archived"); setPage(1); }}
+              type="button"
+            >
+              <Archive aria-hidden="true" size={14} />
+              Archivio
+            </button>
+          </nav>
+          <select className="rounded-lg border border-slate-300 px-3 py-2" onChange={(event) => { setPriorityFilter(event.target.value); setPage(1); }} value={priorityFilter}>
             <option value="">Tutte le priorità</option>{priorities.map((priority) => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}
           </select>
-          <label className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium">
-            <input
-              checked={showPaused}
-              onChange={(event) => { const value = event.target.checked; setShowPaused(value); setPage(1); void loadTickets(statusFilter, priorityFilter, 1, value); }}
-              type="checkbox"
-            />
-            Mostra anche in pausa
-          </label>
         </section>}
 
         {activeTab === "oggi" && <section className="rounded-2xl bg-white p-6 shadow-sm">
@@ -725,7 +765,9 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {tickets.map((ticket) => {
+                {visibleTickets.length === 0 ? (
+                  <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={8}>Nessun ticket per questo filtro.</td></tr>
+                ) : visibleTickets.map((ticket) => {
                   const styles = getPriorityStyles(ticket.priority);
                   return (
                     <tr className={`border-b border-l-4 border-slate-100 last:border-0 ${styles.border} ${styles.background}`} key={ticket.id}>
@@ -807,9 +849,9 @@ export default function AdminPage() {
         </section>
         {totalPages > 1 && (
           <nav className="flex items-center justify-between rounded-2xl bg-white p-4 text-sm shadow-sm" aria-label="Paginazione ticket">
-            <button className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40" disabled={page === 1} onClick={() => void loadTickets(statusFilter, priorityFilter, page - 1, showPaused)} type="button">Precedente</button>
-            <span>Pagina {page} di {totalPages}</span>
-            <button className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40" disabled={page === totalPages} onClick={() => void loadTickets(statusFilter, priorityFilter, page + 1, showPaused)} type="button">Successiva</button>
+            <button className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} type="button">Precedente</button>
+            <span>Pagina {currentPage} di {totalPages}</span>
+            <button className="rounded-lg border border-slate-300 px-3 py-2 disabled:opacity-40" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)} type="button">Successiva</button>
           </nav>
         )}
 
