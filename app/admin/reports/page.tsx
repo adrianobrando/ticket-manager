@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type ReportEntry = {
   id: string;
@@ -38,6 +39,59 @@ const monthLabel = (date: Date) => {
 };
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
 
+const PIE_COLORS = ["#2563eb", "#16a34a", "#9333ea", "#f97316", "#0891b2", "#db2777", "#ca8a04", "#4f46e5"];
+const DEADLINE_COLORS: Record<string, string> = { HARD: "#ef4444", SOFT: "#f59e0b", NONE: "#64748b" };
+type ChartPoint = { name: string; value: number };
+
+const OTHERS_COLOR = "#94a3b8";
+
+// Oltre 6 voci: prime 5 per valore + "Altri" con la somma del resto.
+function groupTopFive(data: ChartPoint[]): ChartPoint[] {
+  if (data.length <= 6) return data;
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+  const others = sorted.slice(5).reduce((sum, item) => sum + item.value, 0);
+  return [...sorted.slice(0, 5), { name: "Altri", value: Math.round(others * 100) / 100 }];
+}
+
+function PieCard({ title, data, format, colorFor }: { title: string; data: ChartPoint[]; format: (v: number) => string; colorFor?: (name: string, i: number) => string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const displayData = isExpanded ? data : groupTopFive(data);
+  const canRegroup = isExpanded && data.length > 6;
+  return (
+    <section className="rounded-2xl bg-white p-6 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {canRegroup && (
+          <button className="text-xs font-semibold text-blue-600 hover:underline" onClick={() => setIsExpanded(false)} type="button">↩ Raggruppa di nuovo</button>
+        )}
+      </div>
+      <div className="mt-4 h-96">
+        {displayData.length === 0 ? (
+          <div className="flex h-full items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-500">Nessun dato per questo periodo</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart margin={{ top: 0, right: 0, bottom: 20, left: 0 }}>
+              <Pie
+                data={displayData}
+                dataKey="value"
+                nameKey="name"
+                innerRadius="40%"
+                outerRadius="70%"
+                onClick={(entry) => { if (entry?.name === "Altri" && !isExpanded) setIsExpanded(true); }}
+                style={{ cursor: "pointer" }}
+              >
+                {displayData.map((entry, i) => <Cell key={entry.name} fill={entry.name === "Altri" ? OTHERS_COLOR : colorFor ? colorFor(entry.name, i) : PIE_COLORS[i % PIE_COLORS.length]} />)}
+              </Pie>
+              <Tooltip formatter={(value) => format(Number(value))} />
+              <Legend wrapperStyle={{ fontSize: "12px" }} />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ReportsContent() {
   const searchParams = useSearchParams();
   const contractId = searchParams.get("contractId");
@@ -50,6 +104,9 @@ function ReportsContent() {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [chartData, setChartData] = useState<any>(null);
+  const [isLoadingCharts, setIsLoadingCharts] = useState(false);
 
   async function load() {
     const query = new URLSearchParams({ from, to });
@@ -69,6 +126,17 @@ function ReportsContent() {
     // Load once for the selected report context.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to, selectedTicket, contractId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => setIsLoadingCharts(true), 0);
+    fetch(`/api/admin/reports/charts?${new URLSearchParams({ from, to })}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setChartData(data))
+      .catch((e) => { if (e?.name !== "AbortError") setChartData(null); })
+      .finally(() => { if (!controller.signal.aborted) setIsLoadingCharts(false); });
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [from, to]);
 
   function selectPeriod(value: string) {
     setPeriod(value);
@@ -130,12 +198,20 @@ function ReportsContent() {
           </div>
         </section>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 print:hidden">
-          {["Ore lavorate per Cliente", "Fatturato stimato per Cliente", "Distribuzione tipo scadenza"].map((chartTitle) => (
-            <section className="rounded-2xl bg-white p-6 shadow-sm" key={chartTitle}>
-              <h2 className="text-lg font-semibold">{chartTitle}</h2>
-              <div className="mt-4 flex h-64 items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-500">Grafico in caricamento...</div>
-            </section>
-          ))}
+          {isLoadingCharts && !chartData ? (
+            ["Ore lavorate per Cliente", "Fatturato stimato per Cliente", "Distribuzione tipo scadenza"].map((t) => (
+              <section className="rounded-2xl bg-white p-6 shadow-sm" key={t}>
+                <h2 className="text-lg font-semibold">{t}</h2>
+                <div className="mt-4 flex h-64 items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-500">Grafico in caricamento...</div>
+              </section>
+            ))
+          ) : (
+            <>
+              <PieCard title="Ore lavorate per Cliente" data={chartData?.orePerCliente ?? []} format={(v) => `${v.toFixed(2)} ore`} />
+              <PieCard title="Fatturato stimato per Cliente" data={chartData?.fatturatoPerCliente ?? []} format={(v) => `€ ${v.toFixed(2)}`} />
+              <PieCard title="Distribuzione tipo scadenza" data={chartData?.distribuzioneScadenze ?? []} format={(v) => `${v.toFixed(2)} ore`} colorFor={(name, i) => DEADLINE_COLORS[name] ?? PIE_COLORS[i]} />
+            </>
+          )}
         </div>
         <section className="rounded-2xl bg-white p-5 shadow-sm print:hidden">
           <div className="flex flex-wrap items-end gap-4">
