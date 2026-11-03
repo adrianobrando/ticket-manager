@@ -17,6 +17,7 @@ import {
   ExternalLink,
   FileText,
   Flame,
+  HelpCircle,
   List,
   ListTodo,
   Menu,
@@ -27,6 +28,14 @@ import {
   X,
 } from "lucide-react";
 import { getPriorityStyles, PriorityBadge } from "@/app/components/ui";
+
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span className="inline-flex items-center text-slate-400 hover:text-slate-700 cursor-help ml-1" title={text}>
+      <HelpCircle aria-label={text} size={14} />
+    </span>
+  );
+}
 
 type AppNotification = { id: string; text: string; icon: "alert" | "clock" | "flame"; onClick?: () => void };
 
@@ -851,14 +860,14 @@ export default function AdminPage() {
 
           {todayData ? <>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {[
-                ["Ore pianificate oggi", formatDuration(oreHardPianificateOggi)],
-                ["Ore libere", formatDuration(oreLibereOggi)],
-                ["Ticket in ritardo", String(todayData.totaleInRitardo)],
-                ["Ticket in pausa", String(todayData.ticketsInPausa.length)],
-              ].map(([label, value]) => (
+              {([
+                ["Ore pianificate oggi", formatDuration(oreHardPianificateOggi), null],
+                ["Ore libere", formatDuration(oreLibereOggi), "Calcolate solo sulle ore HARD (impegni rigidi). I ticket flessibili non intaccano questo numero."],
+                ["Ticket in ritardo", String(todayData.totaleInRitardo), null],
+                ["Ticket in pausa", String(todayData.ticketsInPausa.length), null],
+              ] as const).map(([label, value, hint]) => (
                 <article className="rounded-xl border border-slate-200 bg-slate-50 p-4" key={label}>
-                  <p className="text-sm text-slate-500">{label}</p>
+                  <p className="text-sm text-slate-500">{label}{hint && <InfoTooltip text={hint} />}</p>
                   <p className="mt-1 text-2xl font-bold">{value}</p>
                 </article>
               ))}
@@ -1061,7 +1070,7 @@ export default function AdminPage() {
             const avgLabel = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(avg);
             return (
               <div className="flex flex-wrap items-baseline gap-x-3">
-                <h2 className="text-xl font-semibold">Prossimi 30 giorni</h2>
+                <h2 className="text-xl font-semibold">Prossimi 30 giorni<InfoTooltip text="La vista 'Davvero impegnato' mostra solo i ticket HARD. 'Tutto il lavoro' include anche i flessibili." /></h2>
                 {heatmapData && (
                   <span className="text-sm text-slate-500">
                     {showAll ? "Tutto il lavoro" : "Davvero impegnato"}: {avgLabel}h medie/giorno
@@ -1217,9 +1226,9 @@ export default function AdminPage() {
                   </div>
                   {hardEntries.length === 0
                     ? <p className="mt-2 text-xs text-slate-400">Nessun impegno rigido</p>
-                    : hardEntries.map((entry) => {
+                    : hardEntries.map((entry, entryIndex) => {
                       const styles = getPriorityStyles(entry.ticket.priority);
-                      return <button draggable="true" onDragStart={(e) => handleDragStart(e, entry, date)} className={`mt-2 block w-full rounded border-l-4 p-2 text-left text-xs transition hover:ring-2 hover:ring-blue-300 ${styles.border} ${styles.background}`} key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
+                      return <button draggable="true" onDragStart={(e) => handleDragStart(e, entry, date)} className={`mt-2 block w-full rounded border-l-4 p-2 text-left text-xs transition hover:ring-2 hover:ring-blue-300 ${styles.border} ${styles.background}`} key={`${dateKey(date)}-${entry.ticket.id}-${entryIndex}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
                         <span className="flex items-center justify-between gap-2"><span className="font-semibold">{entry.ticket.title}</span><PriorityBadge priority={entry.ticket.priority} /></span>
                         <span className="mt-1 block">{formatHours(entry.plannedHours)}h pianificate{entry.ticket.oreStimate == null ? " / quota retainer" : ` / ${formatHours(entry.ticket.oreStimate)}h totali`}</span>
                         {entry.ticket.dueDate && <span className="mt-1 block text-slate-600">Scadenza: {formatDate(entry.ticket.dueDate)}</span>}
@@ -1232,7 +1241,7 @@ export default function AdminPage() {
                     <h4 className="text-xs font-semibold text-slate-500">Non urgente</h4>
                     <span className="text-xs text-slate-400">({formatHours(softHours)}h)</span>
                   </div>
-                  {softEntries.map((entry) => <button draggable="true" onDragStart={(e) => handleDragStart(e, entry, date)} className="mt-1 block w-full rounded border-l-2 border-slate-300 bg-slate-50 p-1.5 text-left text-[11px] text-slate-600 transition hover:ring-1 hover:ring-blue-300" key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
+                  {softEntries.map((entry, entryIndex) => <button draggable="true" onDragStart={(e) => handleDragStart(e, entry, date)} className="mt-1 block w-full rounded border-l-2 border-slate-300 bg-slate-50 p-1.5 text-left text-[11px] text-slate-600 transition hover:ring-1 hover:ring-blue-300" key={`${dateKey(date)}-${entry.ticket.id}-${entryIndex}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
                     <span className="flex items-center justify-between gap-2"><span className="font-medium">{entry.ticket.title}</span><span>{formatHours(entry.plannedHours)}h</span></span>
                     {entry.ticket.deadlineType === "SOFT" && entry.ticket.dueDate && <span className="block text-slate-400">target: {new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(entry.ticket.dueDate))}</span>}
                     {entry.lateVsTarget && <span className="block font-semibold text-amber-600">Oltre target</span>}
@@ -1274,6 +1283,7 @@ export default function AdminPage() {
               </label>
               <label className="block text-sm font-medium">
                 Ore previste
+                <InfoTooltip text="Se le ore lavorate superano queste, apparirà un avviso di sforamento e il ticket rimarrà in calendario per essere chiuso." />
                 <input className={`mt-2 w-full rounded-lg border px-3 py-2 ${formErrors.oreStimate ? "border-red-500 focus:ring-red-500" : "border-slate-300"}`} defaultValue={editing.oreStimate ?? ""} min="0" name="oreStimate" step="0.5" type="number" />
                 {formErrors.oreStimate && <p className="mt-1 text-sm text-red-600">{formErrors.oreStimate}</p>}
                 {(editing.oreStimate ?? 0) > 0 && editing.oreConsuntivate > (editing.oreStimate ?? 0) && (
@@ -1303,6 +1313,7 @@ export default function AdminPage() {
               </label>
               <label className="block text-sm font-medium">
                 Tipo scadenza
+                <InfoTooltip text="Rigida: scadenza vera. Morbida: data indicativa, non blocca. Nessuna: backlog senza data, non conta come capacità." />
                 <select className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2" name="deadlineType" onChange={(e) => setDeadlineType(e.target.value as DeadlineType)} value={deadlineType}>
                   <option value="HARD">Rigida</option>
                   <option value="SOFT">Morbida</option>

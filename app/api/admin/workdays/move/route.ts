@@ -25,19 +25,36 @@ export async function POST(request: Request) {
     // pin=false è usato dall'annulla per restituire il giorno alla pianificazione automatica
     const pin = body.pin !== false;
 
-    const existing = await prisma.workDay.findUnique({ where: { date_ticketId: { date: oldDate, ticketId } } });
-    const plannedHours = existing?.plannedHours ?? Number(body.plannedHours);
+    // Ricerca per intervallo di giorno, non per timestamp esatto: tollera righe scritte con fusi orari diversi
+    const dayEnd = (d: Date) => {
+      const e = new Date(d);
+      e.setDate(e.getDate() + 1);
+      return e;
+    };
+    const existingRows = await prisma.workDay.findMany({
+      where: { ticketId, date: { gte: oldDate, lt: dayEnd(oldDate) } },
+    });
+    const existing = existingRows[0];
+    const plannedHours = existingRows.length
+      ? existingRows.reduce((sum, row) => sum + row.plannedHours, 0)
+      : Number(body.plannedHours);
     if (!Number.isFinite(plannedHours) || plannedHours <= 0) return jsonError("Ore pianificate non valide", 400);
 
     if (oldDate.getTime() !== newDate.getTime()) {
       await prisma.$transaction(async (tx) => {
-        if (existing) await tx.workDay.delete({ where: { id: existing.id } });
-        // Il vincolo unico [date, ticketId] impone il merge se il giorno di arrivo esiste già
-        await tx.workDay.upsert({
-          where: { date_ticketId: { date: newDate, ticketId } },
-          create: { date: newDate, ticketId, plannedHours, isPinned: pin },
-          update: { plannedHours: { increment: plannedHours }, isPinned: pin },
+        await tx.workDay.deleteMany({ where: { id: { in: existingRows.map((row) => row.id) } } });
+        // Se il giorno di arrivo esiste già si fa il merge, altrimenti si crea
+        const target = await tx.workDay.findFirst({
+          where: { ticketId, date: { gte: newDate, lt: dayEnd(newDate) } },
         });
+        if (target) {
+          await tx.workDay.update({
+            where: { id: target.id },
+            data: { plannedHours: { increment: plannedHours }, isPinned: pin },
+          });
+        } else {
+          await tx.workDay.create({ data: { date: newDate, ticketId, plannedHours, isPinned: pin } });
+        }
       });
     }
 
