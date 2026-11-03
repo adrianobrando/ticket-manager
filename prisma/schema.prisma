@@ -144,6 +144,7 @@ model WorkDay {
   ticket       Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   plannedHours Float
   overflow     Boolean  @default(false)
+  isPinned     Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   @@unique([date, ticketId])

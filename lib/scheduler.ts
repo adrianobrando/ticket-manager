@@ -205,6 +205,16 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   const { start: monthStart, end: monthEnd } = monthBounds(now);
   const horizonEnd = new Date(now.getTime() + SCHEDULE_HORIZON_DAYS * 86400000);
   const dailyLoad = new Map<string, number>();
+  // Pinned work days stay untouched: they already occupy part of the day.
+  const pinnedWorkDays = await prisma.workDay.findMany({
+    where: { isPinned: true },
+    select: { ticketId: true, date: true, plannedHours: true },
+  });
+  for (const pinned of pinnedWorkDays) {
+    const key = dateKey(pinned.date);
+    dailyLoad.set(key, (dailyLoad.get(key) ?? 0) + Math.round(pinned.plannedHours * HOURS_PRECISION));
+  }
+  const pinnedKeys = new Set(pinnedWorkDays.map((p) => `${p.ticketId}|${dateKey(p.date)}`));
   const allocations = new Map<string, Allocation[]>();
   const overflowTickets = new Set<string>();
   const scheduled = new Map<string, { startDate: Date; endDate: Date; sortOrder: number }>();
@@ -347,8 +357,8 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   }
 
   await prisma.$transaction(async (tx) => {
-    // clear existing work days and scheduled tasks (we'll recreate them from scratch)
-    await tx.workDay.deleteMany();
+    // clear only unpinned work days; pinned ones are kept as-is
+    await tx.workDay.deleteMany({ where: { isPinned: false } });
     await tx.scheduledTask.deleteMany();
 
     // prepare scheduledTask records to create in bulk
@@ -371,6 +381,8 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
     const workDayData: { ticketId: string; date: Date; plannedHours: number; overflow: boolean }[] = [];
     for (const ticket of scheduledTickets) {
       for (const allocation of allocations.get(ticket.id) ?? []) {
+        // @@unique([date, ticketId]): the day is already covered by a pinned work day
+        if (pinnedKeys.has(`${ticket.id}|${dateKey(allocation.date)}`)) continue;
         workDayData.push({
           ticketId: ticket.id,
           date: allocation.date,
