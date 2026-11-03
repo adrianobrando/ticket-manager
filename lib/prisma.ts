@@ -2,6 +2,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { PrismaClient } from "@/app/generated/prisma/client";
 
+process.env.TZ = "Europe/Rome";
+
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
   pgPool?: pg.Pool;

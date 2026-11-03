@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
+process.env.TZ = "Europe/Rome";
+
 export const WORK_HOURS_PER_DAY = Number(process.env.WORK_HOURS_PER_DAY) || 8;
 export const MAX_TICKET_HOURS_PER_DAY = 4;
 export const MIN_TICKET_HOURS_PER_DAY = 0.5;

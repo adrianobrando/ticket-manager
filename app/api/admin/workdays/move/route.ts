@@ -4,6 +4,8 @@ import { requireAdminPassword } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { calculateSchedule } from "@/lib/scheduler";
 
+process.env.TZ = "Europe/Rome";
+
 export const runtime = "nodejs";
 
 // Stessa convenzione di /api/admin/diary: mezzanotte locale da YYYY-MM-DD
