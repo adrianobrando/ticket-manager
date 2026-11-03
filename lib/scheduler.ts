@@ -221,9 +221,19 @@ export async function calculateSchedule(now = new Date()): Promise<ScheduleResul
   const tickets = ticketsFromDatabase as TicketForSchedule[];
   const scheduledTickets: TicketForSchedule[] = [];
 
+  // Pinned hours (today onwards) are already planned: they must not be allocated again.
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const pinnedHours = new Map<string, number>();
+  for (const pinned of pinnedWorkDays) {
+    if (pinned.date < todayStart) continue;
+    pinnedHours.set(pinned.ticketId, (pinnedHours.get(pinned.ticketId) ?? 0) + pinned.plannedHours);
+  }
+
   const remainingFor = (ticket: TicketForSchedule) => {
     const left = (ticket.oreStimate ?? 0) - (workedHours.get(ticket.id) ?? 0);
-    return EXCLUDED_STATUSES.includes(ticket.status) ? Math.max(0, left) : Math.max(1, left);
+    const base = EXCLUDED_STATUSES.includes(ticket.status) ? Math.max(0, left) : Math.max(1, left);
+    return Math.max(0, base - (pinnedHours.get(ticket.id) ?? 0));
   };
 
   // Hourly contracts retain the old finite-estimate behavior.

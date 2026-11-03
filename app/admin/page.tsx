@@ -204,6 +204,9 @@ export default function AdminPage() {
     return date;
   });
   const [diaryDaysToShow, setDiaryDaysToShow] = useState(3);
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const [lastMove, setLastMove] = useState<{ ticketId: string; oldDate: string; newDate: string; plannedHours: number; wasPinned: boolean } | null>(null);
+  const [isUndoing, setIsUndoing] = useState(false);
   const [activeTab, setActiveTab] = useState<"oggi" | "tickets" | "diary" | "contracts">("oggi");
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [todayData, setTodayData] = useState<TodayData | null>(null);
@@ -358,6 +361,65 @@ export default function AdminPage() {
     end.setDate(start.getDate() + 13);
     const result = await request(`/api/admin/diary?start=${dateKey(start)}&end=${dateKey(end)}`);
     setDiary(result.days);
+  }
+
+  async function undoLastMove() {
+    if (!lastMove || isUndoing) return;
+    const move = lastMove;
+    setIsUndoing(true);
+    try {
+      await request("/api/admin/workdays/move", { method: "POST", body: JSON.stringify({ ticketId: move.ticketId, oldDate: move.newDate, newDate: move.oldDate, plannedHours: move.plannedHours, pin: move.wasPinned }) });
+      setLastMove(null);
+      await loadDiary(diaryStart);
+    } catch (undoError) {
+      if (undoError instanceof Error && undoError.message === "AUTH_REQUIRED") {
+        router.replace("/admin/login");
+        return;
+      }
+      setError(undoError instanceof Error ? undoError.message : "Impossibile annullare lo spostamento.");
+    } finally {
+      setIsUndoing(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab !== "diary" || !lastMove) return;
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        void undoLastMove();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
+  function handleDragStart(event: React.DragEvent, entry: DiaryEntry, date: Date) {
+    event.dataTransfer.setData("application/json", JSON.stringify({ ticketId: entry.ticket.id, oldDate: dateKey(date), plannedHours: entry.plannedHours }));
+    event.dataTransfer.effectAllowed = "move";
+  }
+
+  async function handleDrop(event: React.DragEvent, targetDate: Date) {
+    event.preventDefault();
+    setDragOverDate(null);
+    const raw = event.dataTransfer.getData("application/json");
+    if (!raw) return;
+    try {
+      const { ticketId, oldDate, plannedHours } = JSON.parse(raw);
+      const newDate = dateKey(targetDate);
+      if (!ticketId || oldDate === newDate) return;
+      const result = await request("/api/admin/workdays/move", { method: "POST", body: JSON.stringify({ ticketId, oldDate, newDate, plannedHours }) });
+      setLastMove({ ticketId, oldDate, newDate, plannedHours: result.plannedHours ?? plannedHours, wasPinned: Boolean(result.wasPinned) });
+      await loadDiary(diaryStart);
+    } catch (dropError) {
+      if (dropError instanceof Error && dropError.message === "AUTH_REQUIRED") {
+        router.replace("/admin/login");
+        return;
+      }
+      setError(dropError instanceof Error ? dropError.message : "Impossibile spostare il ticket.");
+    }
   }
 
   async function moveDiaryWeek(offset: number) {
@@ -968,6 +1030,13 @@ export default function AdminPage() {
         </>}
 
         {activeTab === "diary" && <section className="rounded-2xl bg-white p-6 shadow-sm">
+          {lastMove && <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-900" role="status">
+            <span>Ticket spostato al {formatDate(lastMove.newDate)}.</span>
+            <span className="flex gap-2">
+              <button className="rounded-lg border border-blue-300 bg-white px-3 py-1 font-semibold hover:bg-blue-100 disabled:opacity-50" disabled={isUndoing} onClick={() => void undoLastMove()} type="button">{isUndoing ? "Annullo…" : "Annulla (⌘Z)"}</button>
+              <button aria-label="Chiudi" className="px-2 text-blue-700 hover:text-blue-900" onClick={() => setLastMove(null)} type="button">×</button>
+            </span>
+          </div>}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-semibold">Diario di lavoro</h2>
@@ -1000,7 +1069,7 @@ export default function AdminPage() {
               const hardHours = hardEntries.reduce((total, entry) => total + entry.plannedHours, 0);
               const softHours = softEntries.reduce((total, entry) => total + entry.plannedHours, 0);
               const overloaded = hardEntries.some((entry) => entry.overflow) || hardHours > 8;
-              return <div className={`min-h-40 rounded-xl p-3 ${isToday ? `border-2 border-blue-500 ${overloaded ? "bg-red-50" : "bg-blue-50"}` : overloaded ? "border border-red-400 bg-red-50" : "border border-slate-200 bg-slate-50"}`} key={dateKey(date)}>
+              return <div className={`min-h-40 rounded-xl p-3 ${isToday ? `border-2 border-blue-500 ${overloaded ? "bg-red-50" : "bg-blue-50"}` : overloaded ? "border border-red-400 bg-red-50" : "border border-slate-200 bg-slate-50"} ${dragOverDate === dateKey(date) ? "ring-2 ring-blue-400 bg-blue-50/50" : ""}`} key={dateKey(date)} onDragOver={(e) => e.preventDefault()} onDragEnter={() => setDragOverDate(dateKey(date))} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOverDate(null); }} onDrop={(e) => void handleDrop(e, date)}>
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold">{new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "numeric", month: "short" }).format(date)}</h3>
                 </div>
@@ -1014,7 +1083,7 @@ export default function AdminPage() {
                     ? <p className="mt-2 text-xs text-slate-400">Nessun impegno rigido</p>
                     : hardEntries.map((entry) => {
                       const styles = getPriorityStyles(entry.ticket.priority);
-                      return <button className={`mt-2 block w-full rounded border-l-4 p-2 text-left text-xs transition hover:ring-2 hover:ring-blue-300 ${styles.border} ${styles.background}`} key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
+                      return <button draggable="true" onDragStart={(e) => handleDragStart(e, entry, date)} className={`mt-2 block w-full rounded border-l-4 p-2 text-left text-xs transition hover:ring-2 hover:ring-blue-300 ${styles.border} ${styles.background}`} key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
                         <span className="flex items-center justify-between gap-2"><span className="font-semibold">{entry.ticket.title}</span><PriorityBadge priority={entry.ticket.priority} /></span>
                         <span className="mt-1 block">{formatHours(entry.plannedHours)}h pianificate{entry.ticket.oreStimate == null ? " / quota retainer" : ` / ${formatHours(entry.ticket.oreStimate)}h totali`}</span>
                         {entry.ticket.dueDate && <span className="mt-1 block text-slate-600">Scadenza: {formatDate(entry.ticket.dueDate)}</span>}
@@ -1027,7 +1096,7 @@ export default function AdminPage() {
                     <h4 className="text-xs font-semibold text-slate-500">Non urgente</h4>
                     <span className="text-xs text-slate-400">({formatHours(softHours)}h)</span>
                   </div>
-                  {softEntries.map((entry) => <button className="mt-1 block w-full rounded border-l-2 border-slate-300 bg-slate-50 p-1.5 text-left text-[11px] text-slate-600 transition hover:ring-1 hover:ring-blue-300" key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
+                  {softEntries.map((entry) => <button draggable="true" onDragStart={(e) => handleDragStart(e, entry, date)} className="mt-1 block w-full rounded border-l-2 border-slate-300 bg-slate-50 p-1.5 text-left text-[11px] text-slate-600 transition hover:ring-1 hover:ring-blue-300" key={`${dateKey(date)}-${entry.ticket.id}`} onClick={() => void openDiaryTicket(entry.ticket.id)} type="button">
                     <span className="flex items-center justify-between gap-2"><span className="font-medium">{entry.ticket.title}</span><span>{formatHours(entry.plannedHours)}h</span></span>
                     {entry.ticket.deadlineType === "SOFT" && entry.ticket.dueDate && <span className="block text-slate-400">target: {new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(new Date(entry.ticket.dueDate))}</span>}
                     {entry.lateVsTarget && <span className="block font-semibold text-amber-600">Oltre target</span>}
