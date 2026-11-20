@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import AdminPageShell from "@/app/admin/AdminPageShell";
 
 type ReportEntry = {
   id: string;
@@ -39,11 +40,11 @@ const monthLabel = (date: Date) => {
 };
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
 
-const PIE_COLORS = ["#2563eb", "#16a34a", "#9333ea", "#f97316", "#0891b2", "#db2777", "#ca8a04", "#4f46e5"];
-const DEADLINE_COLORS: Record<string, string> = { HARD: "#ef4444", SOFT: "#f59e0b", NONE: "#64748b" };
+const PIE_COLORS = ["#9382ff", "#7666ff", "#5046e4", "#b7a4fb", "#a8a6b7", "#918ea0", "#54525f", "#ddd6ff"];
+const DEADLINE_COLORS: Record<string, string> = { HARD: "#9382ff", SOFT: "#5046e4", NONE: "#54525f" };
 type ChartPoint = { name: string; value: number };
 
-const OTHERS_COLOR = "#94a3b8";
+const OTHERS_COLOR = "#54525f";
 
 // Oltre 6 voci: prime 5 per valore + "Altri" con la somma del resto.
 function groupTopFive(data: ChartPoint[]): ChartPoint[] {
@@ -180,7 +181,7 @@ function ReportsContent() {
     : [];
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900 print:bg-white print:px-0 print:py-0">
+    <AdminPageShell activePage="reports" title="Report ore lavorate">
       <div className="mx-auto max-w-5xl space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4 print:block">
           <div><p className="text-sm font-semibold uppercase tracking-widest text-blue-600 print:text-black">Report ore lavorate</p><h1 className="mt-1 text-3xl font-bold">{title}</h1>{clientName && <p className="mt-1 text-slate-600">Cliente: {clientName}</p>}</div>
@@ -228,10 +229,14 @@ function ReportsContent() {
           {report && activities.length === 0 && <p className="py-6 text-sm text-slate-500">Nessuna attività registrata nel periodo.</p>}
         </section>
       </div>
-    </main>
+    </AdminPageShell>
   );
 }
 
 export default function ReportsPage() {
-  return <Suspense fallback={<main className="min-h-screen bg-slate-100 p-10 text-slate-900">Caricamento report...</main>}><ReportsContent /></Suspense>;
+  return (
+    <Suspense fallback={<AdminPageShell activePage="reports" title="Report ore lavorate"><p>Caricamento report...</p></AdminPageShell>}>
+      <ReportsContent />
+    </Suspense>
+  );
 }

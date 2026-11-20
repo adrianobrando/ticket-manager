@@ -9,27 +9,27 @@ type PriorityStyles = {
 
 const priorityStyles: Record<string, PriorityStyles> = {
   urgent: {
-    border: "border-red-500",
-    background: "bg-red-50",
-    badge: "bg-red-100 text-red-800",
+    border: "priority-urgent-border",
+    background: "priority-urgent-surface",
+    badge: "priority-urgent-badge",
     label: "Urgente",
   },
   high: {
-    border: "border-orange-500",
-    background: "bg-orange-50",
-    badge: "bg-orange-100 text-orange-800",
+    border: "priority-high-border",
+    background: "priority-high-surface",
+    badge: "priority-high-badge",
     label: "Alta",
   },
   normal: {
-    border: "border-green-500",
-    background: "bg-green-50",
-    badge: "bg-green-100 text-green-800",
+    border: "priority-normal-border",
+    background: "priority-normal-surface",
+    badge: "priority-normal-badge",
     label: "Normale",
   },
   low: {
-    border: "border-sky-500",
-    background: "bg-sky-50",
-    badge: "bg-sky-100 text-sky-800",
+    border: "priority-low-border",
+    background: "priority-low-surface",
+    badge: "priority-low-badge",
     label: "Bassa",
   },
 };
@@ -44,12 +44,17 @@ export function PriorityBadge({ priority }: { priority: string }) {
 }
 
 export function Card({ className = "", ...props }: HTMLAttributes<HTMLElement>) {
-  return <section className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`} {...props} />;
+  return (
+    <section
+      className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}
+      {...props}
+    />
+  );
 }
 
 export function Badge({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${className}`}>
+    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${className}`}>
       {children}
     </span>
   );

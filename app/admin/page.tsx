@@ -99,8 +99,16 @@ function NotificationBell({ notifications }: { notifications: AppNotification[] 
 }
 
 type DeadlineType = "HARD" | "SOFT" | "NONE";
-type HeatmapBucket = { hours: number; ticketIds: string[] };
-type HeatmapDay = { date: string; byType: Record<DeadlineType, HeatmapBucket> };
+type TicketPriority = "urgent" | "high" | "normal" | "low";
+type HeatmapBucket = {
+  hours: number;
+  ticketIds: string[];
+  priorities: Record<TicketPriority, string[]>;
+};
+type HeatmapDay = {
+  date: string;
+  byType: Record<DeadlineType, HeatmapBucket>;
+};
 
 type Ticket = {
   id: string;
@@ -202,13 +210,13 @@ const statusLabels: Record<string, string> = {
   completed: "Completato",
   cancelled: "Annullato",
 };
+const priorityOrder: TicketPriority[] = ["urgent", "high", "normal", "low"];
 const todayPriorityBorders: Record<string, string> = {
-  urgent: "border-l-red-500",
-  high: "border-l-orange-500",
-  normal: "border-l-yellow-500",
-  low: "border-l-emerald-500",
+  urgent: "priority-urgent-border-left",
+  high: "priority-high-border-left",
+  normal: "priority-normal-border-left",
+  low: "priority-low-border-left",
 };
-
 const TICKETS_PER_PAGE = 20;
 
 function formatDate(value: string | null) {
@@ -1112,38 +1120,70 @@ export default function AdminPage() {
                     ...(showAll ? [...day.byType.SOFT.ticketIds, ...day.byType.NONE.ticketIds] : []),
                   ]).size;
                   const colorClass = plannedHours === 0
-                    ? "bg-slate-50 text-slate-400"
+                    ? "heatmap-load-empty"
                     : plannedHours <= 4
-                      ? "bg-emerald-100 text-emerald-800"
+                      ? "heatmap-load-light"
                       : plannedHours <= 6
-                        ? "bg-yellow-100 text-yellow-800"
+                        ? "heatmap-load-moderate"
                         : plannedHours <= 8
-                          ? "bg-orange-100 text-orange-800"
-                          : "bg-red-100 text-red-800";
+                          ? "heatmap-load-busy"
+                          : "heatmap-load-overloaded";
                   const plannedHoursLabel = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2 }).format(plannedHours);
+                  const dayPriorityIds = priorityOrder.map((priority) => ({
+                    priority,
+                    ticketIds: new Set([
+                      ...day.byType.HARD.priorities[priority],
+                      ...(showAll
+                        ? [
+                            ...day.byType.SOFT.priorities[priority],
+                            ...day.byType.NONE.priorities[priority],
+                          ]
+                        : []),
+                    ]),
+                  }));
+                  const prioritySummary = dayPriorityIds
+                    .filter(({ ticketIds }) => ticketIds.size > 0)
+                    .map(({ priority, ticketIds }) => `${priorityLabels[priority]}: ${ticketIds.size}`)
+                    .join(", ");
+                  const title = `${dateLabel}: ${plannedHoursLabel}h pianificate (${ticketCount} ticket)${prioritySummary ? ` — ${prioritySummary}` : ""}`;
 
                   return (
                     <div
-                      className={`flex min-h-16 flex-col items-center justify-center rounded-lg p-2 text-sm ${colorClass} ${isToday ? "border-2 border-blue-500 font-bold" : "border border-transparent"}`}
+                      aria-label={title}
+                      className={`flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-lg p-2 text-sm ${colorClass} ${isToday ? "border-2 border-blue-500 font-bold" : "border border-transparent"}`}
                       key={day.date}
-                      title={`${dateLabel}: ${plannedHoursLabel}h pianificate (${ticketCount} ticket)`}
+                      role="img"
+                      title={title}
                     >
                       <span>{date.getDate()}</span>
                       <span className="text-xs">{monthLabel}</span>
+                      <span aria-hidden="true" className="flex h-2 items-center gap-0.5">
+                        {dayPriorityIds.map(({ priority, ticketIds }) => ticketIds.size > 0 && (
+                          <span className={`heatmap-priority-${priority} h-1.5 w-1.5 rounded-full`} key={priority} />
+                        ))}
+                      </span>
                     </div>
                   );
                 })}
               </div>
               <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-600">
                 {[
-                  ["bg-slate-50", "0h"],
-                  ["bg-emerald-100", ">0–4h"],
-                  ["bg-yellow-100", ">4–6h"],
-                  ["bg-orange-100", ">6–8h"],
-                  ["bg-red-100", ">8h"],
+                  ["heatmap-load-empty", "0h"],
+                  ["heatmap-load-light", ">0–4h"],
+                  ["heatmap-load-moderate", ">4–6h"],
+                  ["heatmap-load-busy", ">6–8h"],
+                  ["heatmap-load-overloaded", ">8h"],
                 ].map(([color, label]) => (
                   <span className="flex items-center gap-1.5" key={label}>
                     <span className={`h-3 w-3 rounded-sm ${color}`} />{label}
+                  </span>
+                ))}
+              </div>
+              <div aria-label="Priorità dei ticket pianificati" className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-600">
+                {priorityOrder.map((priority) => (
+                  <span className="flex items-center gap-1.5" key={priority}>
+                    <span aria-hidden="true" className={`h-2 w-2 rounded-full heatmap-priority-${priority}`} />
+                    {priorityLabels[priority]}
                   </span>
                 ))}
               </div>

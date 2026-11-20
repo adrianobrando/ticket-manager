@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Pencil, Trash2 } from "lucide-react";
 import { inputClass } from "@/app/components/ui";
+import AdminPageShell from "@/app/admin/AdminPageShell";
 
 type Ticket = { id: string; title: string; status: string; client: { name: string } };
 type Entry = {
@@ -140,7 +142,7 @@ export default function TimeEntriesPage() {
 
   const total = entries.reduce((sum, entry) => sum + entry.durationHours, 0);
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900 sm:px-6">
+    <AdminPageShell activePage="time-entries" title="Registro attività">
       <div className="mx-auto max-w-4xl space-y-6">
         <header>
           <p className="text-sm font-semibold uppercase tracking-widest text-blue-600">Amministrazione</p>
@@ -161,9 +163,9 @@ export default function TimeEntriesPage() {
         <section className="rounded-2xl bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-xl font-semibold">Storico attività</h2><p className="mt-1 text-sm text-slate-500">{formatDate(historyFrom)} – {formatDate(historyTo)} · {entries.length} registrate</p></div><strong>{total.toFixed(2)} h totali</strong></div>
           <div className="mt-5 flex flex-wrap items-end gap-3 border-b border-slate-200 pb-5"><div className="flex flex-wrap gap-2">{(["today", "week", "month", "all"] as const).map((period) => <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:border-blue-400" key={period} onClick={() => selectHistory(period)} type="button">{period === "today" ? "Oggi" : period === "week" ? "Questa settimana" : period === "month" ? "Questo mese" : "Tutto lo storico"}</button>)}</div><label className="text-sm font-medium">Da<input className={`${inputClass} mt-1`} onChange={(event) => { const value = event.target.value; setHistoryFrom(value); void load(value, historyTo); }} type="date" value={historyFrom} /></label><label className="text-sm font-medium">A<input className={`${inputClass} mt-1`} onChange={(event) => { const value = event.target.value; setHistoryTo(value); void load(historyFrom, value); }} type="date" value={historyTo} /></label></div>
-          <div className="mt-4 divide-y divide-slate-200">{entries.length === 0 ? <p className="text-sm text-slate-500">Nessuna attività nel periodo selezionato.</p> : entries.map((entry) => <div className="flex flex-wrap justify-between gap-3 py-4 first:pt-0" key={entry.id}><div><p className="text-sm font-semibold text-slate-500">{formatDate(entry.date)}</p><p className="font-semibold">{formatTime(entry.startTime)} – {formatTime(entry.endTime)} · {entry.durationHours.toFixed(2)} h</p><p className="text-sm">{entry.ticket.title} <span className="text-slate-500">· {entry.ticket.client.name}</span></p>{entry.note && <p className="text-sm text-slate-500">{entry.note}</p>}</div><div className="flex gap-3"><button className="text-sm font-medium text-blue-700" onClick={() => { setEditing(entry); setTicketId(entry.ticketId); setDate(entry.date.slice(0, 10)); setStartTime(entry.startTime.slice(11, 16)); setEndTime(entry.endTime.slice(11, 16)); setNote(entry.note ?? ""); setShowForm(true); }} type="button">Modifica</button><button className="text-sm font-medium text-red-700 disabled:opacity-60" disabled={isDeleting} onClick={() => void remove(entry.id)} type="button">{isDeleting ? "Eliminazione..." : "Elimina"}</button></div></div>)}</div>
+          <div className="mt-4 divide-y divide-slate-200">{entries.length === 0 ? <p className="text-sm text-slate-500">Nessuna attività nel periodo selezionato.</p> : entries.map((entry) => <div className="flex flex-wrap justify-between gap-3 py-4 first:pt-0" key={entry.id}><div><p className="text-sm font-semibold text-slate-500">{formatDate(entry.date)}</p><p className="font-semibold">{formatTime(entry.startTime)} – {formatTime(entry.endTime)} · {entry.durationHours.toFixed(2)} h</p><p className="text-sm">{entry.ticket.title} <span className="text-slate-500">· {entry.ticket.client.name}</span></p>{entry.note && <p className="text-sm text-slate-500">{entry.note}</p>}</div><div className="flex gap-2"><button aria-label={`Modifica attività ${entry.ticket.title}`} className="activity-action activity-action-edit" onClick={() => { setEditing(entry); setTicketId(entry.ticketId); setDate(entry.date.slice(0, 10)); setStartTime(entry.startTime.slice(11, 16)); setEndTime(entry.endTime.slice(11, 16)); setNote(entry.note ?? ""); setShowForm(true); }} title="Modifica" type="button"><Pencil aria-hidden="true" size={18} /></button><button aria-label={isDeleting ? "Eliminazione in corso" : `Elimina attività ${entry.ticket.title}`} className="activity-action activity-action-delete" disabled={isDeleting} onClick={() => void remove(entry.id)} title={isDeleting ? "Eliminazione in corso" : "Elimina"} type="button"><Trash2 aria-hidden="true" size={18} /></button></div></div>)}</div>
         </section>
       </div>
-    </main>
+    </AdminPageShell>
   );
 }
