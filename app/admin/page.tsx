@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { getPriorityStyles, PriorityBadge } from "@/app/components/ui";
+import SentryTestButton from "./SentryTestButton";
 
 function InfoTooltip({ text }: { text: string }) {
   return (
@@ -801,6 +802,7 @@ export default function AdminPage() {
       </aside>
       <main className="min-w-0 flex-1 bg-slate-50 p-6">
         <div className="mx-auto max-w-7xl space-y-6">
+        <SentryTestButton />
         <div className="hidden items-center justify-end md:flex">
           <NotificationBell notifications={notifications} />
         </div>
